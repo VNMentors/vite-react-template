@@ -2,6 +2,18 @@ export type User = {
   id: number;
   email: string;
   name: string;
+  role: "admin" | "staff";
+};
+
+export type Group = {
+  id: number;
+  name: string;
+  description: string | null;
+  color: string;
+  order_index: number;
+  is_won: number;
+  customer_count?: number;
+  created_at: string;
 };
 
 export type Customer = {
@@ -9,9 +21,23 @@ export type Customer = {
   name: string;
   email: string | null;
   phone: string | null;
+  facebook_link: string | null;
   company: string | null;
+  product_id: number | null;
+  product_name: string | null;
+  group_id: number | null;
+  group_name: string | null;
+  group_color: string | null;
+  group_is_won: number | null;
+  assigned_to: string | null;
+  assigned_user_id: number | null;
   status: string;
   source: string | null;
+  list_price: number | null;
+  discount_pct: number | null;
+  final_price: number | null;
+  follow_up_at: string | null;
+  follow_up_note: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -24,12 +50,42 @@ export type Note = {
   created_at: string;
 };
 
+export type Product = {
+  id: number;
+  name: string;
+  price: number;
+  description: string | null;
+  active: number;
+  created_at: string;
+};
+
 export type Stats = {
   total: number;
   monthly: number;
-  lead: number;
-  prospect: number;
-  active: number;
-  inactive: number;
+  revenue: number;
+  won: number;
   recentCustomers: Customer[];
+  followUps: Customer[];
+  byGroup: {
+    id: number;
+    name: string;
+    color: string;
+    order_index: number;
+    is_won: number;
+    count: number;
+  }[];
+};
+
+export type Reports = {
+  summary: {
+    total_leads: number;
+    total_won: number;
+    total_revenue: number;
+    conversion_rate: number;
+  };
+  byGroup: { id: number; name: string; color: string; order_index: number; is_won: number; leads: number; revenue: number }[];
+  byProduct: { product_name: string; leads: number; won: number; revenue: number }[];
+  bySource: { source: string; leads: number; won: number }[];
+  byStaff: { staff: string; leads: number; won: number; revenue: number }[];
+  monthlyTrend: { month: string; leads: number; won: number; revenue: number }[];
 };

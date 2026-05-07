@@ -8,6 +8,9 @@ import Dashboard from "./pages/Dashboard";
 import Customers from "./pages/Customers";
 import CustomerDetail from "./pages/CustomerDetail";
 import Users from "./pages/Users";
+import Products from "./pages/Products";
+import Reports from "./pages/Reports";
+import Groups from "./pages/Groups";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,6 +60,26 @@ export default function App() {
                   <Layout>
                     <CustomerDetail />
                   </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/groups"
+              element={<ProtectedRoute><Layout><Groups /></Layout></ProtectedRoute>}
+            />
+            <Route
+              path="/products"
+              element={
+                <ProtectedRoute>
+                  <Layout><Products /></Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <Layout><Reports /></Layout>
                 </ProtectedRoute>
               }
             />
