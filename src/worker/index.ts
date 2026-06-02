@@ -9,6 +9,8 @@ import users from "./routes/users";
 import importRoute from "./routes/import";
 import publicRoute from "./routes/public";
 import groupsRoute from "./routes/groups";
+import subscriptionsRoute from "./routes/subscriptions";
+import lmsRoute from "./routes/lms";
 
 const app = new Hono<AppEnv>();
 
@@ -21,5 +23,7 @@ app.route("/api/users", users);
 app.route("/api/import", importRoute);
 app.route("/api/public", publicRoute);
 app.route("/api/groups", groupsRoute);
+app.route("/api", subscriptionsRoute);
+app.route("/api/lms", lmsRoute);
 
 export default app;

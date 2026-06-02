@@ -19,6 +19,12 @@
 			"database_id": "a3f5b2c6-c053-48df-a03b-dd8068940eda"
 		}
 	],
+	"kv_namespaces": [
+		{
+			"binding": "LMS_KV",
+			"id": "45c4e8adde3341bfaeed21c9c2f0dcd0"
+		}
+	],
 	"vars": {}
 
 }

@@ -17,7 +17,8 @@ auth.post("/register", async (c) => {
     const authHeader = c.req.header("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return c.json({ error: "Unauthorized" }, 401);
     try {
-      await verify(authHeader.slice(7), c.env.JWT_SECRET);
+      const payload = await verify(authHeader.slice(7), c.env.JWT_SECRET);
+      if (payload["role"] !== "admin") return c.json({ error: "Forbidden" }, 403);
     } catch {
       return c.json({ error: "Invalid token" }, 401);
     }

@@ -1,4 +1,4 @@
-import type { Customer, Group, Note, Product, Reports, Stats, User } from "./types";
+import type { Customer, Group, Invoice, LmsClient, LmsInvoice, Note, PipelineCustomer, Product, Reports, Stats, Subscription, User } from "./types";
 
 const TOKEN_KEY = "crm_token";
 export function getToken()      { return localStorage.getItem(TOKEN_KEY); }
@@ -33,7 +33,13 @@ export const api = {
 
   // Stats & Reports
   getStats:   () => request<Stats>("/stats"),
-  getReports: () => request<Reports>("/reports"),
+  getReports: (params?: { from?: string; to?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.from) qs.set("from", params.from);
+    if (params?.to)   qs.set("to",   params.to);
+    const q = qs.toString();
+    return request<Reports>(`/reports${q ? "?" + q : ""}`);
+  },
 
   // Groups
   getGroups:     () => request<Group[]>("/groups"),
@@ -52,6 +58,8 @@ export const api = {
   createUser: (name: string, email: string, password: string, role?: string) =>
     request<{ id: number; email: string; name: string; role: string }>("/auth/register",
       { method: "POST", body: JSON.stringify({ name, email, password, role }) }),
+  updateUser: (id: number, data: { name?: string; email?: string; password?: string; role?: string }) =>
+    request<{ id: number; name: string; email: string; role: string }>(`/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   updateUserRole: (id: number, role: string) =>
     request<{ success: boolean }>(`/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
   deleteUser: (id: number) =>
@@ -64,7 +72,7 @@ export const api = {
   updateProduct: (id: number, data: Partial<Product>) =>
     request<Product>(`/products/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteProduct: (id: number) =>
-    request<{ success: boolean }>(`/products/${id}`, { method: "DELETE" }),
+    request<{ success: boolean; deleted?: boolean; deactivated?: boolean; references?: number }>(`/products/${id}`, { method: "DELETE" }),
 
   // Customers
   getCustomers: (params?: { q?: string; group_id?: string; product_id?: string; assigned_to?: string; follow_up_today?: string; page?: number }) => {
@@ -83,6 +91,9 @@ export const api = {
     request<Customer>(`/customers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteCustomer: (id: number)                    => request<{ success: boolean }>(`/customers/${id}`, { method: "DELETE" }),
 
+  // Pipeline (Kanban)
+  getPipeline: () => request<PipelineCustomer[]>("/customers/pipeline"),
+
   // Notes
   getNotes:    (customerId: number)                          => request<Note[]>(`/customers/${customerId}/notes`),
   createNote:  (customerId: number, content: string, type: string) =>
@@ -90,7 +101,59 @@ export const api = {
   deleteNote:  (customerId: number, noteId: number)         =>
     request<{ success: boolean }>(`/customers/${customerId}/notes/${noteId}`, { method: "DELETE" }),
 
+  // Bulk operations
+  bulkCustomers: (body: {
+    ids: number[];
+    action: "assign" | "group" | "auto_distribute";
+    user_id?: number | null; user_name?: string | null;
+    group_id?: number | null;
+    user_ids?: number[]; user_names?: string[];
+  }) => request<{ success: boolean; updated: number }>(
+    "/customers/bulk", { method: "PATCH", body: JSON.stringify(body) }
+  ),
+
   // Import
   importCustomers: (rows: unknown[]) =>
-    request<{ imported: number; errors: string[] }>("/import/customers", { method: "POST", body: JSON.stringify({ rows }) }),
+    request<{ imported: number; updated: number; skipped: number; errors: string[]; warnings: string[] }>(
+      "/import/customers",
+      { method: "POST", body: JSON.stringify({ rows, duplicate_mode: "update" }) },
+    ),
+
+  // Subscriptions
+  getSubscriptions: (customerId: number) =>
+    request<Subscription[]>(`/customers/${customerId}/subscriptions`),
+  createSubscription: (customerId: number, data: Partial<Subscription>) =>
+    request<Subscription>(`/customers/${customerId}/subscriptions`, { method: "POST", body: JSON.stringify(data) }),
+  deleteSubscription: (customerId: number, subId: number) =>
+    request<{ success: boolean }>(`/customers/${customerId}/subscriptions/${subId}`, { method: "DELETE" }),
+
+  // Invoices
+  getInvoices: (customerId: number) =>
+    request<Invoice[]>(`/customers/${customerId}/invoices`),
+  createInvoice: (customerId: number, data: Partial<Invoice>) =>
+    request<Invoice>(`/customers/${customerId}/invoices`, { method: "POST", body: JSON.stringify(data) }),
+  markInvoicePaid: (customerId: number, invoiceId: number) =>
+    request<{ success: boolean }>(`/customers/${customerId}/invoices/${invoiceId}/pay`, { method: "PATCH" }),
+  deleteInvoice: (customerId: number, invoiceId: number) =>
+    request<{ success: boolean }>(`/customers/${customerId}/invoices/${invoiceId}`, { method: "DELETE" }),
+
+  // LMS Clients
+  getLmsClients: () => request<LmsClient[]>("/lms"),
+  createLmsClient: (data: Partial<LmsClient>) =>
+    request<LmsClient>("/lms", { method: "POST", body: JSON.stringify(data) }),
+  updateLmsClient: (id: number, data: Partial<LmsClient>) =>
+    request<LmsClient>(`/lms/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  setLmsClientStatus: (id: number, status: string) =>
+    request<{ success: boolean; status: string }>(`/lms/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  reprovisionLmsClient: (id: number) =>
+    request<{ success: boolean; kv_key: string }>(`/lms/${id}/provision`, { method: "POST" }),
+  deleteLmsClient: (id: number) =>
+    request<{ success: boolean }>(`/lms/${id}`, { method: "DELETE" }),
+  getLmsInvoices: (clientId: number) => request<LmsInvoice[]>(`/lms/${clientId}/invoices`),
+  createLmsInvoice: (clientId: number, data: Partial<LmsInvoice>) =>
+    request<LmsInvoice>(`/lms/${clientId}/invoices`, { method: "POST", body: JSON.stringify(data) }),
+  markLmsInvoicePaid: (clientId: number, invoiceId: number) =>
+    request<{ success: boolean }>(`/lms/${clientId}/invoices/${invoiceId}/pay`, { method: "PATCH" }),
+  deleteLmsInvoice: (clientId: number, invoiceId: number) =>
+    request<{ success: boolean }>(`/lms/${clientId}/invoices/${invoiceId}`, { method: "DELETE" }),
 };

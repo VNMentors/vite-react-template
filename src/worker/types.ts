@@ -2,6 +2,7 @@ export type Bindings = {
   DB: D1Database;
   JWT_SECRET: string;
   API_KEY: string;
+  LMS_KV: KVNamespace; // KV namespace dùng cho LMS SaaS tenant routing
 };
 
 export type Variables = {
