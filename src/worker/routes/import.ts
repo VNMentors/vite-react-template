@@ -15,6 +15,8 @@ type ImportRow = {
   discount_pct?: number | null;
   final_price?: number | null;
   note?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 const importRoute = new Hono<AppEnv>();
@@ -34,8 +36,8 @@ importRoute.post("/customers", async (c) => {
       const { meta } = await c.env.DB.prepare(`
         INSERT INTO customers
           (name, phone, email, facebook_link, source, product_id, assigned_to,
-           status, list_price, discount_pct, final_price)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           status, list_price, discount_pct, final_price, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), COALESCE(?, datetime('now')))
       `).bind(
         row.name.trim(),
         row.phone ?? null,
@@ -48,6 +50,8 @@ importRoute.post("/customers", async (c) => {
         row.list_price ?? null,
         row.discount_pct ?? 0,
         row.final_price ?? null,
+        row.created_at ?? null,
+        row.updated_at ?? null,
       ).run();
 
       // Thêm ghi chú nếu có

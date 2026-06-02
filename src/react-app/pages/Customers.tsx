@@ -33,11 +33,11 @@ function fmtMoney(v: number | null | undefined) {
 
 export default function Customers() {
   const qc = useQueryClient();
-  const [search, setSearch]         = useState("");
+  const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
-  const [page, setPage]             = useState(1);
-  const [modal, setModal]           = useState<{ open: boolean; customer?: Customer }>({ open: false });
-  const [form, setForm]             = useState<CustomerForm>(emptyForm);
+  const [page, setPage] = useState(1);
+  const [modal, setModal] = useState<{ open: boolean; customer?: Customer }>({ open: false });
+  const [form, setForm] = useState<CustomerForm>(emptyForm);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [groupPickerFor, setGroupPickerFor] = useState<number | null>(null);

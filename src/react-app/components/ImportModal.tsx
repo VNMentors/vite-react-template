@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Upload, X, Download, CheckCircle, AlertCircle } from "lucide-react";
+import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 import type { Product } from "../lib/types";
 import { STATUS_LABELS } from "./StatusBadge";
@@ -73,7 +74,56 @@ type ImportRow = {
   source?: string; product_id?: number; assigned_to?: string;
   status?: string; list_price?: number; discount_pct?: number;
   final_price?: number; note?: string;
+  created_at?: string;
+  updated_at?: string;
 };
+
+function parseExcelDate(val: any): string | undefined {
+  if (val == null) return undefined;
+  
+  if (val instanceof Date) {
+    if (!isNaN(val.getTime())) {
+      return formatDate(val);
+    }
+  }
+
+  const num = Number(val);
+  if (!isNaN(num) && num > 30000 && num < 60000) {
+    const date = new Date((num - 25569) * 86400 * 1000);
+    return formatDate(date);
+  }
+
+  const cleanVal = String(val).trim();
+  if (!cleanVal) return undefined;
+  
+  const parts = cleanVal.split(/[/\-]/);
+  if (parts.length === 3) {
+    const day = parts[0].padStart(2, '0');
+    const month = parts[1].padStart(2, '0');
+    let year = parts[2].trim();
+    if (year.includes(" ")) {
+      const timePart = year.split(/\s+/)[1];
+      year = year.split(/\s+/)[0];
+      return `${year}-${month}-${day} ${timePart}`;
+    }
+    return `${year}-${month}-${day} 00:00:00`;
+  }
+  
+  if (/^\d+$/.test(cleanVal)) {
+    return undefined;
+  }
+
+  const d = new Date(cleanVal);
+  if (!isNaN(d.getTime())) {
+    return formatDate(d);
+  }
+  return cleanVal;
+}
+
+function formatDate(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
 
 type Props = { onClose: () => void; products: Product[] };
 
@@ -89,78 +139,192 @@ export default function ImportModal({ onClose, products }: Props) {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(""); setResult(null);
+    const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
     const reader = new FileReader();
+
     reader.onload = ev => {
       try {
-        const text = ev.target?.result as string;
-        const parsed = parseCSV(text);
-        if (parsed.length < 2) { setError("File không có dữ liệu."); return; }
-
-        // Dòng đầu là header
-        const hdrs = parsed[0];
-
-        // Tìm chỉ số cột theo header
-        const idx = (name: string) => {
-          const i = hdrs.findIndex(h => h.toLowerCase().includes(name.toLowerCase()));
-          return i >= 0 ? i : -1;
-        };
-
-        const colName = idx("tên");
-        const colPhone = idx("sđt");
-        const colEmail = idx("email");
-        const colFb = idx("fb") >= 0 ? idx("fb") : idx("link");
-        const colSource = idx("nguồn");
-        const colProduct = idx("sản phẩm");
-        const colStatus = idx("trạng thái");
-        const colStaff = idx("sale");
-        const colListPrice = idx("niêm yết");
-        const colDiscount = idx("giảm");
-        const colFinalPrice = idx("chốt") >= 0 && idx("chốt") !== colStatus ? idx("chốt") : idx("giá chốt");
-        const colNote = idx("ghi chú");
-
-        if (colName < 0) { setError('Không tìm thấy cột "Tên KH". Kiểm tra lại file.'); return; }
-
         const importRows: ImportRow[] = [];
-        for (let i = 1; i < parsed.length; i++) {
-          const r = parsed[i];
-          const name = colName >= 0 ? r[colName] : "";
-          if (!name?.trim()) continue;
 
-          // Map product name → id
-          const productName = colProduct >= 0 ? r[colProduct]?.trim() : "";
-          const product = products.find(p =>
-            p.name.toLowerCase() === productName?.toLowerCase()
-          );
+        if (isExcel) {
+          const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array", cellDates: true });
+          
+          for (const sheetName of workbook.SheetNames) {
+            const worksheet = workbook.Sheets[sheetName];
+            const parsedSheet = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+            if (parsedSheet.length < 2) continue;
 
-          // Map status
-          const rawStatus = colStatus >= 0 ? r[colStatus]?.trim().toLowerCase() : "";
-          const status = STATUS_MAP[rawStatus] ?? "new";
+            const hdrs = parsedSheet[0].map(h => String(h || "").trim());
+            const idx = (names: string[]) => {
+              return hdrs.findIndex(h => {
+                const lowerH = h.toLowerCase().trim();
+                return names.some(name => lowerH.includes(name) || name.includes(lowerH));
+              });
+            };
 
-          const lp = colListPrice >= 0 ? parseFloat(r[colListPrice]?.replace(/[^0-9.]/g, "")) : NaN;
-          const dp = colDiscount >= 0 ? parseFloat(r[colDiscount]?.replace(/[^0-9.]/g, "")) : NaN;
-          const fp = colFinalPrice >= 0 ? parseFloat(r[colFinalPrice]?.replace(/[^0-9.]/g, "")) : NaN;
+            const colCreatedAt = idx(["nhận", "ngày nhận", "ngay nhan", "created"]);
+            const colName = idx(["tên", "ten", "khách hàng", "khach hang", "name"]);
+            const colPhone = idx(["sđt", "phone", "zalo", "điện thoại", "dien thoai"]);
+            const colEmail = idx(["email", "mail"]);
+            const colFb = idx(["fb", "facebook", "link fb"]);
+            const colSource = idx(["nguồn", "nguon", "source"]);
+            const colProduct = idx(["sản phẩm", "san pham", "product"]);
+            const colStatus = idx(["trạng thái", "trang thai", "status"]);
+            const colStaff = idx(["sale", "nhân viên", "nhan vien", "staff"]);
+            const colListPrice = idx(["niêm yết", "list price"]);
+            const colDiscount = idx(["giảm", "discount"]);
+            const colFinalPrice = idx(["giá chốt", "gia chot", "chốt", "chot"]);
+            const colNote = idx(["ghi chú", "ghi chu", "note"]);
+            const colUpdatedAt = idx(["ngày chốt", "ngay chot", "chốt ngày", "chot ngay"]);
 
-          importRows.push({
-            name: name.trim(),
-            phone: colPhone >= 0 ? r[colPhone]?.trim() || undefined : undefined,
-            email: colEmail >= 0 ? r[colEmail]?.trim() || undefined : undefined,
-            facebook_link: colFb >= 0 ? r[colFb]?.trim() || undefined : undefined,
-            source: colSource >= 0 ? r[colSource]?.trim() || undefined : undefined,
-            product_id: product?.id ?? undefined,
-            assigned_to: colStaff >= 0 ? r[colStaff]?.trim() || undefined : undefined,
-            status,
-            list_price: !isNaN(lp) ? lp : undefined,
-            discount_pct: !isNaN(dp) ? dp : undefined,
-            final_price: !isNaN(fp) ? fp : undefined,
-            note: colNote >= 0 ? r[colNote]?.trim() || undefined : undefined,
-          });
+            const lowerSheet = sheetName.toLowerCase();
+            const isLmsSheet = lowerSheet.includes("lms");
+            const is990Sheet = lowerSheet.includes("990");
+
+            for (let i = 1; i < parsedSheet.length; i++) {
+              const r = parsedSheet[i];
+              if (!r) continue;
+              const name = colName >= 0 ? String(r[colName] || "") : "";
+              if (!name?.trim()) continue;
+
+              // Map product name → id
+              let productName = colProduct >= 0 ? String(r[colProduct] || "").trim() : "";
+              if (!productName) {
+                if (isLmsSheet) productName = "LMS";
+                else if (is990Sheet) productName = "Pre90";
+              }
+              const product = products.find(p =>
+                p.name.toLowerCase() === productName?.toLowerCase()
+              );
+
+              // Map status
+              const rawStatus = colStatus >= 0 ? String(r[colStatus] || "").trim().toLowerCase() : "";
+              const status = STATUS_MAP[rawStatus] ?? "new";
+
+              // Map source
+              let source = colSource >= 0 ? String(r[colSource] || "").trim() : "";
+              if (source.toLowerCase() === "phone feature") {
+                source = "990toeic App";
+              }
+              if (!source) {
+                if (isLmsSheet) source = ""; // LMS nguồn để trống
+                else if (is990Sheet) source = "990toeic App";
+              }
+
+              const lp = colListPrice >= 0 ? parseFloat(String(r[colListPrice] || "").replace(/[^0-9.]/g, "")) : NaN;
+              const dp = colDiscount >= 0 ? parseFloat(String(r[colDiscount] || "").replace(/[^0-9.]/g, "")) : NaN;
+              const fp = colFinalPrice >= 0 ? parseFloat(String(r[colFinalPrice] || "").replace(/[^0-9.]/g, "")) : NaN;
+
+              const createdAtVal = colCreatedAt >= 0 ? String(r[colCreatedAt] || "") : "";
+              const updatedAtVal = colUpdatedAt >= 0 ? String(r[colUpdatedAt] || "") : "";
+
+              importRows.push({
+                name: name.trim(),
+                phone: colPhone >= 0 ? String(r[colPhone] || "").trim() || undefined : undefined,
+                email: colEmail >= 0 ? String(r[colEmail] || "").trim() || undefined : undefined,
+                facebook_link: colFb >= 0 ? String(r[colFb] || "").trim() || undefined : undefined,
+                source: source || undefined,
+                product_id: product?.id ?? undefined,
+                assigned_to: colStaff >= 0 ? String(r[colStaff] || "").trim() || undefined : undefined,
+                status,
+                list_price: !isNaN(lp) ? lp : undefined,
+                discount_pct: !isNaN(dp) ? dp : undefined,
+                final_price: !isNaN(fp) ? fp : undefined,
+                note: colNote >= 0 ? String(r[colNote] || "").trim() || undefined : undefined,
+                created_at: parseExcelDate(createdAtVal) || new Date().toISOString().replace("T", " ").slice(0, 19),
+                updated_at: parseExcelDate(updatedAtVal) || new Date().toISOString().replace("T", " ").slice(0, 19),
+              });
+            }
+          }
+        } else {
+          // File CSV
+          const text = ev.target?.result as string;
+          const parsedSheet = parseCSV(text);
+          if (parsedSheet.length >= 2) {
+            const hdrs = parsedSheet[0].map(h => String(h || "").trim());
+            const idx = (names: string[]) => {
+              return hdrs.findIndex(h => {
+                const lowerH = h.toLowerCase().trim();
+                return names.some(name => lowerH.includes(name) || name.includes(lowerH));
+              });
+            };
+
+            const colCreatedAt = idx(["nhận", "ngày nhận", "ngay nhan", "created"]);
+            const colName = idx(["tên", "ten", "khách hàng", "khach hang", "name"]);
+            const colPhone = idx(["sđt", "phone", "zalo", "điện thoại", "dien thoai"]);
+            const colEmail = idx(["email", "mail"]);
+            const colFb = idx(["fb", "facebook", "link fb"]);
+            const colSource = idx(["nguồn", "nguon", "source"]);
+            const colProduct = idx(["sản phẩm", "san pham", "product"]);
+            const colStatus = idx(["trạng thái", "trang thai", "status"]);
+            const colStaff = idx(["sale", "nhân viên", "nhan vien", "staff"]);
+            const colListPrice = idx(["niêm yết", "list price"]);
+            const colDiscount = idx(["giảm", "discount"]);
+            const colFinalPrice = idx(["giá chốt", "gia chot", "chốt", "chot"]);
+            const colNote = idx(["ghi chú", "ghi chu", "note"]);
+            const colUpdatedAt = idx(["ngày chốt", "ngay chot", "chốt ngày", "chot ngay"]);
+
+            for (let i = 1; i < parsedSheet.length; i++) {
+              const r = parsedSheet[i];
+              const name = colName >= 0 ? String(r[colName] || "") : "";
+              if (!name?.trim()) continue;
+
+              const productName = colProduct >= 0 ? String(r[colProduct] || "").trim() : "";
+              const product = products.find(p =>
+                p.name.toLowerCase() === productName?.toLowerCase()
+              );
+
+              const rawStatus = colStatus >= 0 ? String(r[colStatus] || "").trim().toLowerCase() : "";
+              const status = STATUS_MAP[rawStatus] ?? "new";
+
+              let source = colSource >= 0 ? String(r[colSource] || "").trim() : "";
+              if (source.toLowerCase() === "phone feature") {
+                source = "990toeic App";
+              }
+
+              const lp = colListPrice >= 0 ? parseFloat(String(r[colListPrice] || "").replace(/[^0-9.]/g, "")) : NaN;
+              const dp = colDiscount >= 0 ? parseFloat(String(r[colDiscount] || "").replace(/[^0-9.]/g, "")) : NaN;
+              const fp = colFinalPrice >= 0 ? parseFloat(String(r[colFinalPrice] || "").replace(/[^0-9.]/g, "")) : NaN;
+
+              const createdAtVal = colCreatedAt >= 0 ? String(r[colCreatedAt] || "") : "";
+              const updatedAtVal = colUpdatedAt >= 0 ? String(r[colUpdatedAt] || "") : "";
+
+              importRows.push({
+                name: name.trim(),
+                phone: colPhone >= 0 ? String(r[colPhone] || "").trim() || undefined : undefined,
+                email: colEmail >= 0 ? String(r[colEmail] || "").trim() || undefined : undefined,
+                facebook_link: colFb >= 0 ? String(r[colFb] || "").trim() || undefined : undefined,
+                source: source || undefined,
+                product_id: product?.id ?? undefined,
+                assigned_to: colStaff >= 0 ? String(r[colStaff] || "").trim() || undefined : undefined,
+                status,
+                list_price: !isNaN(lp) ? lp : undefined,
+                discount_pct: !isNaN(dp) ? dp : undefined,
+                final_price: !isNaN(fp) ? fp : undefined,
+                note: colNote >= 0 ? String(r[colNote] || "").trim() || undefined : undefined,
+                created_at: parseExcelDate(createdAtVal) || new Date().toISOString().replace("T", " ").slice(0, 19),
+                updated_at: parseExcelDate(updatedAtVal) || new Date().toISOString().replace("T", " ").slice(0, 19),
+              });
+            }
+          }
+        }
+
+        if (importRows.length === 0) {
+          setError("Không tìm thấy dòng dữ liệu hợp lệ (thiếu cột Tên KH).");
+          return;
         }
         setRows(importRows);
-      } catch {
-        setError("Không đọc được file. Hãy lưu dạng CSV (UTF-8).");
+      } catch (err) {
+        setError(isExcel ? "Không đọc được file Excel." : "Không đọc được file CSV. Hãy lưu dạng CSV (UTF-8).");
       }
     };
-    reader.readAsText(file, "UTF-8");
+
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file, "UTF-8");
+    }
   }
 
   async function handleImport() {
@@ -202,12 +366,12 @@ export default function ImportModal({ onClose, products }: Props) {
 
           {/* Step 2: Upload */}
           <div>
-            <p className="text-sm font-medium text-gray-700 mb-2">Bước 2 — Upload file CSV</p>
+            <p className="text-sm font-medium text-gray-700 mb-2">Bước 2 — Upload file Excel hoặc CSV</p>
             <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl py-8 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
               <Upload size={24} className="text-gray-400 mb-2" />
               <span className="text-sm text-gray-500">Click để chọn file, hoặc kéo thả vào đây</span>
-              <span className="text-xs text-gray-400 mt-1">.csv · Excel cần lưu dạng "CSV UTF-8"</span>
-              <input ref={fileRef} type="file" accept=".csv,.txt" onChange={handleFile} className="hidden" />
+              <span className="text-xs text-gray-400 mt-1">Hỗ trợ file .xlsx, .xls, .csv</span>
+              <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx,.xls" onChange={handleFile} className="hidden" />
             </label>
           </div>
 

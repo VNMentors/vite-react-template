@@ -25,16 +25,16 @@ function staffWhere(role: string, userId: number) {
 }
 
 customers.get("/", async (c) => {
-  const q          = c.req.query("q") ?? "";
-  const groupId    = c.req.query("group_id") ?? "";
-  const productId  = c.req.query("product_id") ?? "";
+  const q = c.req.query("q") ?? "";
+  const groupId = c.req.query("group_id") ?? "";
+  const productId = c.req.query("product_id") ?? "";
   const assignedTo = c.req.query("assigned_to") ?? "";
   const followUpToday = c.req.query("follow_up_today") === "1";
-  const page       = Math.max(1, parseInt(c.req.query("page") ?? "1"));
+  const page = Math.max(1, parseInt(c.req.query("page") ?? "1"));
   const limit = 20;
   const offset = (page - 1) * limit;
 
-  const role   = c.get("userRole");
+  const role = c.get("userRole");
   const userId = c.get("userId");
   const { clause: roleClause, params: roleParams } = staffWhere(role, userId);
 
@@ -46,16 +46,16 @@ customers.get("/", async (c) => {
     const like = `%${q}%`;
     params.push(like, like, like);
   }
-  if (groupId)   { conds.push("c.group_id = ?");    params.push(groupId); }
-  if (productId) { conds.push("c.product_id = ?");  params.push(productId); }
-  if (assignedTo){ conds.push("c.assigned_to = ?"); params.push(assignedTo); }
+  if (groupId) { conds.push("c.group_id = ?"); params.push(groupId); }
+  if (productId) { conds.push("c.product_id = ?"); params.push(productId); }
+  if (assignedTo) { conds.push("c.assigned_to = ?"); params.push(assignedTo); }
   if (followUpToday) {
     conds.push("DATE(c.follow_up_at) <= DATE('now') AND c.follow_up_at IS NOT NULL AND c.group_id NOT IN (SELECT id FROM groups WHERE is_won=1)");
   }
 
   const where = (conds.length > 0 ? conds.join(" AND ") : "1=1") + " " + roleClause;
 
-  const listP  = [...params, ...roleParams, limit, offset];
+  const listP = [...params, ...roleParams, limit, offset];
   const countP = [...params, ...roleParams];
 
   const [rows, countRow] = await Promise.all([
@@ -79,7 +79,7 @@ customers.post("/", async (c) => {
   const body = await c.req.json<Partial<Customer>>();
   if (!body.name?.trim()) return c.json({ error: "Name is required" }, 400);
 
-  const role   = c.get("userRole");
+  const role = c.get("userRole");
   const userId = c.get("userId");
   const assignedUserId = role === "staff" ? userId : (body.assigned_user_id ?? null);
 
@@ -92,13 +92,13 @@ customers.post("/", async (c) => {
     VALUES (?,?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?)
   `).bind(
     body.name.trim(),
-    body.email        ?? null, body.phone         ?? null,
-    body.facebook_link ?? null, body.company       ?? null,
-    body.product_id   ?? null, body.group_id      ?? null,
-    body.assigned_to  ?? null, assignedUserId,
-    body.status       ?? "new", body.source        ?? null,
-    body.list_price   ?? null, body.discount_pct  ?? 0,
-    body.final_price  ?? null,
+    body.email ?? null, body.phone ?? null,
+    body.facebook_link ?? null, body.company ?? null,
+    body.product_id ?? null, body.group_id ?? null,
+    body.assigned_to ?? null, assignedUserId,
+    body.status ?? "new", body.source ?? null,
+    body.list_price ?? null, body.discount_pct ?? 0,
+    body.final_price ?? null,
     body.follow_up_at ?? null, body.follow_up_note ?? null,
   ).run();
 
@@ -108,7 +108,7 @@ customers.post("/", async (c) => {
 });
 
 customers.get("/:id", async (c) => {
-  const role   = c.get("userRole");
+  const role = c.get("userRole");
   const userId = c.get("userId");
   const { clause, params } = staffWhere(role, userId);
   const customer = await c.env.DB.prepare(
@@ -120,7 +120,7 @@ customers.get("/:id", async (c) => {
 
 customers.put("/:id", async (c) => {
   const id = c.req.param("id");
-  const role   = c.get("userRole");
+  const role = c.get("userRole");
   const userId = c.get("userId");
   const { clause, params: rp } = staffWhere(role, userId);
 
@@ -138,21 +138,21 @@ customers.put("/:id", async (c) => {
       follow_up_at=?, follow_up_note=?, updated_at=datetime('now')
     WHERE id=?
   `).bind(
-    body.name          ?? existing.name,
-    body.email         ?? existing.email,
-    body.phone         ?? existing.phone,
+    body.name ?? existing.name,
+    body.email ?? existing.email,
+    body.phone ?? existing.phone,
     body.facebook_link ?? existing.facebook_link,
-    body.company       ?? existing.company,
-    body.product_id    ?? existing.product_id,
-    "group_id"  in body ? (body.group_id  ?? null) : existing.group_id,
-    body.assigned_to   ?? existing.assigned_to,
+    body.company ?? existing.company,
+    body.product_id ?? existing.product_id,
+    "group_id" in body ? (body.group_id ?? null) : existing.group_id,
+    body.assigned_to ?? existing.assigned_to,
     body.assigned_user_id ?? existing.assigned_user_id,
-    body.status        ?? existing.status,
-    body.source        ?? existing.source,
-    body.list_price    ?? existing.list_price,
-    body.discount_pct  ?? existing.discount_pct,
-    body.final_price   ?? existing.final_price,
-    "follow_up_at"   in body ? (body.follow_up_at   ?? null) : existing.follow_up_at,
+    body.status ?? existing.status,
+    body.source ?? existing.source,
+    body.list_price ?? existing.list_price,
+    body.discount_pct ?? existing.discount_pct,
+    body.final_price ?? existing.final_price,
+    "follow_up_at" in body ? (body.follow_up_at ?? null) : existing.follow_up_at,
     "follow_up_note" in body ? (body.follow_up_note ?? null) : existing.follow_up_note,
     id,
   ).run();
@@ -164,7 +164,7 @@ customers.put("/:id", async (c) => {
 
 customers.delete("/:id", async (c) => {
   const id = c.req.param("id");
-  const role   = c.get("userRole");
+  const role = c.get("userRole");
   const userId = c.get("userId");
   const { clause, params: rp } = staffWhere(role, userId);
   const existing = await c.env.DB.prepare(

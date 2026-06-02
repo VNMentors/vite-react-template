@@ -11,9 +11,9 @@ export default defineConfig({
 		tailwindcss(),
 		react(),
 		cloudflare(
-			USE_REMOTE_D1
+			(USE_REMOTE_D1
 				? { experimental: { remoteBindings: true } }
-				: {}
+				: {}) as any
 		),
 	],
 });

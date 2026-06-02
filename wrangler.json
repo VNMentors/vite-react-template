@@ -19,6 +19,8 @@
 			"database_id": "a3f5b2c6-c053-48df-a03b-dd8068940eda"
 		}
 	],
-	"vars": {}
+	"vars": {
+		"JWT_SECRET": "882fe41ca689c28079044af1ce0f66713ef297cac23e5d72acd90398bd20582f"
+	}
 
 }
