@@ -20,7 +20,6 @@
 		}
 	],
 	"vars": {
-		"JWT_SECRET": "882fe41ca689c28079044af1ce0f66713ef297cac23e5d72acd90398bd20582f"
 	},
 	"kv_namespaces": [
 		{

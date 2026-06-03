@@ -121,7 +121,7 @@ type Props = {
 
 function parseExcelDate(val: any): string | undefined {
   if (val == null) return undefined;
-  
+
   if (val instanceof Date) {
     if (!isNaN(val.getTime())) {
       return formatDate(val);
@@ -136,7 +136,7 @@ function parseExcelDate(val: any): string | undefined {
 
   const cleanVal = String(val).trim();
   if (!cleanVal) return undefined;
-  
+
   const parts = cleanVal.split(/[/\-]/);
   if (parts.length === 3) {
     const day = parts[0].padStart(2, '0');
@@ -149,7 +149,7 @@ function parseExcelDate(val: any): string | undefined {
     }
     return `${year}-${month}-${day} 00:00:00`;
   }
-  
+
   if (/^\d+$/.test(cleanVal)) {
     return undefined;
   }
@@ -255,7 +255,7 @@ export default function ImportModal({ onClose, products, groups }: Props) {
         if (isExcel) {
           const data = new Uint8Array(ev.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: "array", cellDates: true });
-          
+
           for (const sheetName of workbook.SheetNames) {
             const worksheet = workbook.Sheets[sheetName];
             const parsedSheet = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
@@ -310,6 +310,7 @@ export default function ImportModal({ onClose, products, groups }: Props) {
               // Map status
               const rawStatus = colStatus >= 0 ? String(r[colStatus] || "").trim().toLowerCase() : "";
               const status = STATUS_MAP[rawStatus] ?? "new";
+              const group_id = rawStatus ? statusToGroupId(rawStatus, groups) : null;
 
               // Map source
               let source = colSource >= 0 ? String(r[colSource] || "").trim() : "";
@@ -335,6 +336,9 @@ export default function ImportModal({ onClose, products, groups }: Props) {
                 facebook_link: colFb >= 0 ? String(r[colFb] || "").trim() || undefined : undefined,
                 source: source || undefined,
                 product_id: product?.id ?? undefined,
+                product_name: productName || undefined,
+                group_id,
+                group_name: rawStatus || undefined,
                 assigned_to: colStaff >= 0 ? String(r[colStaff] || "").trim() || undefined : undefined,
                 status,
                 list_price: !isNaN(lp) ? lp : undefined,
@@ -346,84 +350,17 @@ export default function ImportModal({ onClose, products, groups }: Props) {
               });
             }
           }
+          if (importRows.length === 0) {
+            setError("Không tìm thấy dòng dữ liệu hợp lệ (thiếu cột Tên KH).");
+            return;
+          }
+          setRows(importRows);
         } else {
           // File CSV
           const text = ev.target?.result as string;
           const parsedSheet = parseCSV(text);
-          if (parsedSheet.length >= 2) {
-            const hdrs = parsedSheet[0].map(h => String(h || "").trim());
-            const idx = (names: string[]) => {
-              return hdrs.findIndex(h => {
-                const lowerH = h.toLowerCase().trim();
-                return names.some(name => lowerH.includes(name) || name.includes(lowerH));
-              });
-            };
-
-            const colCreatedAt = idx(["nhận", "ngày nhận", "ngay nhan", "created"]);
-            const colName = idx(["tên", "ten", "khách hàng", "khach hang", "name"]);
-            const colPhone = idx(["sđt", "phone", "zalo", "điện thoại", "dien thoai"]);
-            const colEmail = idx(["email", "mail"]);
-            const colFb = idx(["fb", "facebook", "link fb"]);
-            const colSource = idx(["nguồn", "nguon", "source"]);
-            const colProduct = idx(["sản phẩm", "san pham", "product"]);
-            const colStatus = idx(["trạng thái", "trang thai", "status"]);
-            const colStaff = idx(["sale", "nhân viên", "nhan vien", "staff"]);
-            const colListPrice = idx(["niêm yết", "list price"]);
-            const colDiscount = idx(["giảm", "discount"]);
-            const colFinalPrice = idx(["giá chốt", "gia chot", "chốt", "chot"]);
-            const colNote = idx(["ghi chú", "ghi chu", "note"]);
-            const colUpdatedAt = idx(["ngày chốt", "ngay chot", "chốt ngày", "chot ngay"]);
-
-            for (let i = 1; i < parsedSheet.length; i++) {
-              const r = parsedSheet[i];
-              const name = colName >= 0 ? String(r[colName] || "") : "";
-              if (!name?.trim()) continue;
-
-              const productName = colProduct >= 0 ? String(r[colProduct] || "").trim() : "";
-              const product = products.find(p =>
-                p.name.toLowerCase() === productName?.toLowerCase()
-              );
-
-              const rawStatus = colStatus >= 0 ? String(r[colStatus] || "").trim().toLowerCase() : "";
-              const status = STATUS_MAP[rawStatus] ?? "new";
-
-              let source = colSource >= 0 ? String(r[colSource] || "").trim() : "";
-              if (source.toLowerCase() === "phone feature") {
-                source = "990toeic App";
-              }
-
-              const lp = colListPrice >= 0 ? parseFloat(String(r[colListPrice] || "").replace(/[^0-9.]/g, "")) : NaN;
-              const dp = colDiscount >= 0 ? parseFloat(String(r[colDiscount] || "").replace(/[^0-9.]/g, "")) : NaN;
-              const fp = colFinalPrice >= 0 ? parseFloat(String(r[colFinalPrice] || "").replace(/[^0-9.]/g, "")) : NaN;
-
-              const createdAtVal = colCreatedAt >= 0 ? String(r[colCreatedAt] || "") : "";
-              const updatedAtVal = colUpdatedAt >= 0 ? String(r[colUpdatedAt] || "") : "";
-
-              importRows.push({
-                name: name.trim(),
-                phone: colPhone >= 0 ? String(r[colPhone] || "").trim() || undefined : undefined,
-                email: colEmail >= 0 ? String(r[colEmail] || "").trim() || undefined : undefined,
-                facebook_link: colFb >= 0 ? String(r[colFb] || "").trim() || undefined : undefined,
-                source: source || undefined,
-                product_id: product?.id ?? undefined,
-                assigned_to: colStaff >= 0 ? String(r[colStaff] || "").trim() || undefined : undefined,
-                status,
-                list_price: !isNaN(lp) ? lp : undefined,
-                discount_pct: !isNaN(dp) ? dp : undefined,
-                final_price: !isNaN(fp) ? fp : undefined,
-                note: colNote >= 0 ? String(r[colNote] || "").trim() || undefined : undefined,
-                created_at: parseExcelDate(createdAtVal) || new Date().toISOString().replace("T", " ").slice(0, 19),
-                updated_at: parseExcelDate(updatedAtVal) || new Date().toISOString().replace("T", " ").slice(0, 19),
-              });
-            }
-          }
+          rowsFromSheet(parsedSheet);
         }
-
-        if (importRows.length === 0) {
-          setError("Không tìm thấy dòng dữ liệu hợp lệ (thiếu cột Tên KH).");
-          return;
-        }
-        setRows(importRows);
       } catch (err) {
         setError(isExcel ? "Không đọc được file Excel." : "Không đọc được file CSV. Hãy lưu dạng CSV (UTF-8).");
       }

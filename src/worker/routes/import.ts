@@ -11,7 +11,6 @@ import {
   resolveProductId,
   resolveUser,
   statusFromLabel,
-  syncPrimaryDeal,
   type LookupGroup,
   type LookupProduct,
   type LookupUser,
@@ -65,140 +64,205 @@ importRoute.post("/customers", async (c) => {
       .all<LookupUser>(),
   ]);
 
-  const existingStmt = c.env.DB.prepare(`
-    SELECT id FROM customers
-    WHERE (? IS NOT NULL AND phone = ?)
-       OR (? IS NOT NULL AND LOWER(email) = LOWER(?))
-    ORDER BY id ASC LIMIT 1
-  `);
   const duplicateMode = duplicate_mode ?? "update";
+  const CHUNK_SIZE = 100;
 
-  for (const row of rows) {
-    if (!row.name?.trim()) { errors.push(`Bỏ qua dòng thiếu tên`); continue; }
+  // Pre-load all customers in memory to avoid SELECT query per row
+  const allCustomers = await c.env.DB.prepare("SELECT id, phone, email FROM customers").all<{ id: number; phone: string | null; email: string | null }>();
+  const phoneMap = new Map<string, number>();
+  const emailMap = new Map<string, number>();
+  for (const cust of allCustomers.results) {
+    if (cust.phone) phoneMap.set(cust.phone, cust.id);
+    if (cust.email) emailMap.set(cust.email.toLowerCase(), cust.id);
+  }
+
+  // Pre-load all deals in memory to know if a deal exists for syncPrimaryDeal
+  let hasDealsTable = false;
+  const dealMap = new Map<number, number>();
+  try {
+    const allDeals = await c.env.DB.prepare("SELECT id, customer_id FROM deals").all<{ id: number; customer_id: number }>();
+    for (const deal of allDeals.results) {
+      dealMap.set(deal.customer_id, deal.id);
+    }
+    hasDealsTable = true;
+  } catch {
+    // Table deals may not exist yet on production D1
+  }
+
+  for (let start = 0; start < rows.length; start += CHUNK_SIZE) {
+    const chunk = rows.slice(start, start + CHUNK_SIZE);
+    
+    // We will build a batch of queries for this chunk
+    const customerStmts: {
+      stmt: any;
+      row: ImportRow;
+      phone: string | null;
+      email: string | null;
+      productId: number | null;
+      groupId: number | null;
+      assignedUser: LookupUser | null;
+      status: string | null;
+      listPrice: number | null;
+      discountPct: number;
+      finalPrice: number | null;
+      dateValue: string | null;
+      existingId: number | null;
+    }[] = [];
+
+    for (const row of chunk) {
+      if (!row.name?.trim()) { errors.push(`Bỏ qua dòng thiếu tên`); continue; }
+      try {
+        const phone = cleanPhone(row.phone);
+        const email = cleanEmail(row.email);
+        const productId = resolveProductId(products.results, row.product_id, row.product_name);
+        const groupId = resolveGroupId(groups.results, row.group_id, row.group_name, row.status);
+        const assignedUser = resolveUser(users.results, row.assigned_to);
+        const status = row.status ? statusFromLabel(row.status) : null;
+        const receivedDate = parseDateString(row.received_at || row.created_at);
+        const dateValue = receivedDate ? `${receivedDate} 07:00:00` : null;
+        const listPrice = parseMoney(row.list_price);
+        const discountPct = parsePercent(row.discount_pct) ?? 0;
+        const finalPrice = parseMoney(row.final_price);
+
+        if (row.product_name && !productId) warnings.push(`Không map được sản phẩm "${row.product_name}" cho "${row.name}"`);
+        if (row.assigned_to && !assignedUser) warnings.push(`Không map được sale "${row.assigned_to}" cho "${row.name}"`);
+
+        // Find duplicate in memory
+        let existingId: number | null = null;
+        if (duplicateMode !== "create") {
+          if (phone && phoneMap.has(phone)) {
+            existingId = phoneMap.get(phone)!;
+          } else if (email && emailMap.has(email.toLowerCase())) {
+            existingId = emailMap.get(email.toLowerCase())!;
+          }
+        }
+
+        if (existingId && duplicateMode === "skip") {
+          skipped++;
+          continue;
+        }
+
+        let stmt;
+        if (existingId) {
+          stmt = c.env.DB.prepare(`
+            UPDATE customers SET
+              name=?, phone=COALESCE(?, phone), email=COALESCE(?, email),
+              facebook_link=COALESCE(?, facebook_link), company=COALESCE(?, company),
+              source=COALESCE(?, source), product_id=COALESCE(?, product_id),
+              group_id=COALESCE(?, group_id), assigned_to=COALESCE(?, assigned_to),
+              assigned_user_id=COALESCE(?, assigned_user_id), status=COALESCE(?, status),
+              list_price=COALESCE(?, list_price), discount_pct=COALESCE(?, discount_pct),
+              final_price=COALESCE(?, final_price), updated_at=datetime('now')
+            WHERE id=?
+          `).bind(
+            row.name.trim(), phone, email, row.facebook_link?.trim() || null,
+            row.company?.trim() || null, row.source?.trim() || null, productId,
+            groupId, assignedUser?.name ?? row.assigned_to?.trim() ?? null,
+            assignedUser?.id ?? null, status, listPrice, discountPct, finalPrice,
+            existingId
+          );
+        } else {
+          const createdAt = dateValue ?? new Date().toISOString().replace("T", " ").slice(0, 19);
+          stmt = c.env.DB.prepare(`
+            INSERT INTO customers
+              (name, phone, email, facebook_link, company, source, product_id, group_id,
+               assigned_to, assigned_user_id, status, list_price, discount_pct, final_price,
+               created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            row.name.trim(), phone, email, row.facebook_link?.trim() || null,
+            row.company?.trim() || null, row.source?.trim() || null, productId,
+            groupId, assignedUser?.name ?? row.assigned_to?.trim() ?? null,
+            assignedUser?.id ?? null, status ?? "new", listPrice, discountPct, finalPrice,
+            createdAt, createdAt
+          );
+        }
+
+        customerStmts.push({
+          stmt, row, phone, email, productId, groupId, assignedUser,
+          status, listPrice, discountPct, finalPrice, dateValue, existingId
+        });
+      } catch (err) {
+        errors.push(`Lỗi khi phân tích dòng "${row.name}": ${String(err)}`);
+      }
+    }
+
+    if (customerStmts.length === 0) continue;
+
     try {
-      const { meta } = await c.env.DB.prepare(`
-        INSERT INTO customers
-          (name, phone, email, facebook_link, source, product_id, assigned_to,
-           status, list_price, discount_pct, final_price, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), COALESCE(?, datetime('now')))
-      `).bind(
-        row.name.trim(),
-        row.phone ?? null,
-        row.email ?? null,
-        row.facebook_link ?? null,
-        row.source ?? null,
-        row.product_id ?? null,
-        row.assigned_to ?? null,
-        row.status ?? "new",
-        row.list_price ?? null,
-        row.discount_pct ?? 0,
-        row.final_price ?? null,
-        row.created_at ?? null,
-        row.updated_at ?? null,
-      ).run();
-      const phone = cleanPhone(row.phone);
-      const email = cleanEmail(row.email);
-      const productId = resolveProductId(products.results, row.product_id, row.product_name);
-      const groupId = resolveGroupId(groups.results, row.group_id, row.group_name, row.status);
-      const assignedUser = resolveUser(users.results, row.assigned_to);
-      const status = row.status ? statusFromLabel(row.status) : null;
-      const receivedDate = parseDateString(row.received_at);
-      const dateValue = receivedDate ? `${receivedDate} 07:00:00` : null;
-      const listPrice = parseMoney(row.list_price);
-      const discountPct = parsePercent(row.discount_pct) ?? 0;
-      const finalPrice = parseMoney(row.final_price);
+      // Execute first batch (insert/update customers)
+      const customerResults = await c.env.DB.batch(customerStmts.map(x => x.stmt));
 
-      if (row.product_name && !productId) warnings.push(`Không map được sản phẩm "${row.product_name}" cho "${row.name}"`);
-      if (row.assigned_to && !assignedUser) warnings.push(`Không map được sale "${row.assigned_to}" cho "${row.name}"`);
+      // Now build secondary statements (notes and deals)
+      const secondaryStmts: any[] = [];
 
-      const existing = duplicateMode !== "create" && (phone || email)
-        ? await existingStmt.bind(phone, phone, email, email).first<{ id: number }>()
-        : null;
+      for (let i = 0; i < customerStmts.length; i++) {
+        const item = customerStmts[i];
+        const res = customerResults[i];
+        
+        let customerId = item.existingId;
+        if (item.existingId) {
+          updated++;
+        } else {
+          customerId = Number(res.meta.last_row_id);
+          imported++;
+          // Update local maps so duplicates within the SAME import file are also caught
+          if (item.phone) phoneMap.set(item.phone, customerId);
+          if (item.email) emailMap.set(item.email.toLowerCase(), customerId);
+        }
 
-      if (existing && duplicateMode === "skip") {
-        skipped++;
-        continue;
+        if (!customerId) continue;
+
+        // Note
+        if (item.row.note?.trim()) {
+          secondaryStmts.push(
+            c.env.DB.prepare(
+              "INSERT INTO notes (customer_id, content, type) VALUES (?, ?, 'note')"
+            ).bind(customerId, item.row.note.trim())
+          );
+        }
+
+        // Deal Syncing
+        if (hasDealsTable) {
+          const group = groups.results.find(g => g.id === item.groupId);
+          const isWon = group?.is_won === 1;
+          const amount = item.finalPrice ?? 0;
+          const dealId = dealMap.get(customerId);
+
+          if (isWon && amount > 0) {
+            if (dealId) {
+              secondaryStmts.push(
+                c.env.DB.prepare(`
+                  UPDATE deals
+                  SET product_id=?, amount=?, status='won', closed_at=COALESCE(closed_at, date('now')),
+                      note=COALESCE(note, 'CRM primary deal')
+                  WHERE id=?
+                `).bind(item.productId, amount, dealId)
+              );
+            } else {
+              secondaryStmts.push(
+                c.env.DB.prepare(`
+                  INSERT INTO deals (customer_id, product_id, amount, status, closed_at, note)
+                  VALUES (?, ?, ?, 'won', date('now'), 'CRM primary deal')
+                `).bind(customerId, item.productId, amount)
+              );
+            }
+          } else if (dealId && !isWon) {
+            secondaryStmts.push(
+              c.env.DB.prepare(
+                "UPDATE deals SET status='open', closed_at=NULL WHERE id=? AND note IN ('CRM primary deal', 'Migrated từ final_price cũ')"
+              ).bind(dealId)
+            );
+          }
+        }
       }
 
-      let customerId: number;
-      if (existing) {
-        await c.env.DB.prepare(`
-          UPDATE customers SET
-            name=?,
-            phone=COALESCE(?, phone),
-            email=COALESCE(?, email),
-            facebook_link=COALESCE(?, facebook_link),
-            company=COALESCE(?, company),
-            source=COALESCE(?, source),
-            product_id=COALESCE(?, product_id),
-            group_id=COALESCE(?, group_id),
-            assigned_to=COALESCE(?, assigned_to),
-            assigned_user_id=COALESCE(?, assigned_user_id),
-            status=COALESCE(?, status),
-            list_price=COALESCE(?, list_price),
-            discount_pct=COALESCE(?, discount_pct),
-            final_price=COALESCE(?, final_price),
-            updated_at=datetime('now')
-          WHERE id=?
-        `).bind(
-          row.name.trim(),
-          phone,
-          email,
-          row.facebook_link?.trim() || null,
-          row.company?.trim() || null,
-          row.source?.trim() || null,
-          productId,
-          groupId,
-          assignedUser?.name ?? row.assigned_to?.trim() ?? null,
-          assignedUser?.id ?? null,
-          status,
-          listPrice,
-          discountPct,
-          finalPrice,
-          existing.id,
-        ).run();
-        customerId = existing.id;
-        updated++;
-      } else {
-        const createdAt = dateValue ?? new Date().toISOString().replace("T", " ").slice(0, 19);
-        const { meta } = await c.env.DB.prepare(`
-        INSERT INTO customers
-          (name, phone, email, facebook_link, company, source, product_id, group_id,
-           assigned_to, assigned_user_id, status, list_price, discount_pct, final_price,
-           created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          row.name.trim(),
-          phone,
-          email,
-          row.facebook_link?.trim() || null,
-          row.company?.trim() || null,
-          row.source?.trim() || null,
-          productId,
-          groupId,
-          assignedUser?.name ?? row.assigned_to?.trim() ?? null,
-          assignedUser?.id ?? null,
-          status ?? "new",
-          listPrice,
-          discountPct,
-          finalPrice,
-          createdAt,
-          createdAt,
-        ).run();
-        customerId = Number(meta.last_row_id);
-        imported++;
+      // Execute secondary batch
+      if (secondaryStmts.length > 0) {
+        await c.env.DB.batch(secondaryStmts);
       }
-
-      // Thêm ghi chú nếu có
-      if (row.note?.trim() && customerId) {
-        await c.env.DB.prepare(
-          "INSERT INTO notes (customer_id, content, type) VALUES (?, ?, 'note')"
-        ).bind(customerId, row.note.trim()).run();
-      }
-
-      await syncPrimaryDeal(c.env.DB, customerId);
     } catch (err) {
-      errors.push(`Lỗi khi import "${row.name}": ${String(err)}`);
+      errors.push(`Lỗi khi lưu dữ liệu lên database: ${String(err)}`);
     }
   }
 

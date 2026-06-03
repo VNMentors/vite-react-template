@@ -81,8 +81,11 @@ export function resolveProductId(
   productName?: string | null,
 ) {
   if (productId && products.some((p) => p.id === productId)) return productId;
-  const key = normalizeText(productName);
+  let key = normalizeText(productName);
   if (!key) return null;
+  if (key === "pre90") {
+    key = "990toeic";
+  }
 
   const exact = products.find((p) => normalizeText(p.name) === key);
   if (exact) return exact.id;
@@ -127,7 +130,7 @@ export function resolveGroupId(
   if (groupId && groups.some((g) => g.id === groupId)) return groupId;
 
   const groupKey = normalizeText(groupName);
-  if (groupKey) {
+  if (groupKey && groupKey !== "moi" && groupKey !== "new") {
     const exact = groups.find((g) => normalizeText(g.name) === groupKey);
     if (exact) return exact.id;
     const fuzzy = groups.find((g) => {

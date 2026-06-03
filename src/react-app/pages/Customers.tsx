@@ -8,6 +8,7 @@ import {
 import { api } from "../lib/api";
 import type { Customer, Group, Product } from "../lib/types";
 import { GroupBadge } from "../components/GroupBadge";
+import { StatusBadge } from "../components/StatusBadge";
 import ImportModal from "../components/ImportModal";
 import { useAuth } from "../hooks/useAuth";
 
@@ -32,8 +33,20 @@ function lastContactLabel(d: string | null | undefined) {
   const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
   if (days === 0) return { label: "Hôm nay", urgent: false };
   if (days === 1) return { label: "Hôm qua", urgent: false };
-  if (days <= 7)  return { label: `${days} ngày`, urgent: false };
+  if (days <= 7) return { label: `${days} ngày`, urgent: false };
   return { label: `${days} ngày`, urgent: true };
+}
+
+function formatDateTime(dateStr: string) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "—";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
 }
 
 // ── Inline stage picker (chips) ───────────────────────────────
@@ -65,6 +78,7 @@ function StagePicker({ customer, groups, onClose }: {
 export default function Customers() {
   const { isAdmin } = useAuth();
   const qc = useQueryClient();
+
   // Filters
   const [search, setSearch]           = useState("");
   const [groupFilter, setGroupFilter] = useState("");
@@ -99,9 +113,9 @@ export default function Customers() {
     queryKey: ["customers", search, groupFilter, productFilter, page],
     queryFn: () => api.getCustomers({ q: search, group_id: groupFilter, product_id: productFilter, page }),
   });
-  const { data: groups   = [] } = useQuery({ queryKey: ["groups"],   queryFn: () => api.getGroups(),   ...STATIC });
+  const { data: groups = [] } = useQuery({ queryKey: ["groups"], queryFn: () => api.getGroups(), ...STATIC });
   const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: () => api.getProducts(), ...STATIC });
-  const { data: users    = [] } = useQuery({ queryKey: ["users"],    queryFn: () => api.getUsers(),    ...STATIC });
+  const { data: users = [] } = useQuery({ queryKey: ["users"], queryFn: () => api.getUsers(), ...STATIC });
 
   const activeProducts = (products as Product[]).filter((p) => p.active);
 
@@ -274,32 +288,34 @@ export default function Customers() {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-auto max-h-[calc(100vh-280px)] relative shadow-sm">
+        <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 text-xs">
+            <tr className="bg-gray-50 text-gray-600 text-xs">
               {isAdmin && (
-                <th className="px-3 py-3 w-8">
+                <th className="px-3 py-3 w-8 sticky top-0 bg-gray-50 z-20 shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">
                   <input type="checkbox" checked={allSelected} onChange={toggleAll}
                     className="rounded border-gray-300 cursor-pointer" />
                 </th>
               )}
-              <th className="text-left px-4 py-3 font-medium">Tên khách hàng</th>
-              <th className="text-left px-4 py-3 font-medium">SĐT</th>
-              <th className="text-left px-4 py-3 font-medium">Sản phẩm</th>
-              <th className="text-left px-4 py-3 font-medium">Sale</th>
-              <th className="text-left px-4 py-3 font-medium">Cơ hội / Giai đoạn</th>
-              <th className="text-left px-4 py-3 font-medium">
+              <th className="text-left px-4 py-3 font-medium sticky top-0 bg-gray-50 z-20 shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">Tên khách hàng</th>
+              <th className="text-left px-4 py-3 font-medium sticky top-0 bg-gray-50 z-20 shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">SĐT</th>
+              <th className="text-left px-4 py-3 font-medium sticky top-0 bg-gray-50 z-20 shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">Sản phẩm</th>
+              <th className="text-left px-4 py-3 font-medium sticky top-0 bg-gray-50 z-20 shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">Trạng thái</th>
+              <th className="text-left px-4 py-3 font-medium sticky top-0 bg-gray-50 z-20 shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">Cơ hội / Giai đoạn</th>
+              <th className="text-left px-4 py-3 font-medium sticky top-0 bg-gray-50 z-20 shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">Sale</th>
+              <th className="text-left px-4 py-3 font-medium sticky top-0 bg-gray-50 z-20 shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">Thời gian nhận</th>
+              <th className="text-left px-4 py-3 font-medium sticky top-0 bg-gray-50 z-20 shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">
                 <span className="flex items-center gap-1"><Clock size={12} /> Liên hệ cuối</span>
               </th>
-              <th className="px-4 py-3 w-14"></th>
+              <th className="px-4 py-3 w-14 sticky top-0 bg-gray-50 z-20 shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {isLoading ? (
-              <tr><td colSpan={isAdmin ? 8 : 7} className="py-12 text-center text-gray-400">Đang tải...</td></tr>
+              <tr><td colSpan={isAdmin ? 10 : 9} className="py-12 text-center text-gray-400">Đang tải...</td></tr>
             ) : (data?.customers.length ?? 0) === 0 ? (
-              <tr><td colSpan={isAdmin ? 8 : 7} className="py-12 text-center text-gray-400">Chưa có lead nào</td></tr>
+              <tr><td colSpan={isAdmin ? 10 : 9} className="py-12 text-center text-gray-400">Chưa có lead nào</td></tr>
             ) : (
               data?.customers.map(c => {
                 const { label: lastContact, urgent } = lastContactLabel(c.last_note_at);
@@ -322,7 +338,9 @@ export default function Customers() {
                         ? <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">{c.product_name}</span>
                         : <span className="text-gray-300 text-xs">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{c.assigned_to ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={c.status} />
+                    </td>
 
                     {/* Stage — click để đổi */}
                     <td className="px-4 py-3 relative">
@@ -344,6 +362,9 @@ export default function Customers() {
                       </div>
                     </td>
 
+                    <td className="px-4 py-3 text-gray-500 text-xs">{c.assigned_to ?? "—"}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs font-mono">{formatDateTime(c.created_at)}</td>
+
                     <td className="px-4 py-3">
                       <span className={`flex items-center gap-1 text-xs ${urgent ? "text-red-500 font-medium" : "text-gray-400"}`}>
                         {urgent && <AlertCircle size={11} />}{lastContact}
@@ -363,7 +384,7 @@ export default function Customers() {
         </table>
 
         {(data?.totalPages ?? 0) > 1 && (
-          <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+          <div className="sticky bottom-0 bg-white z-20 px-6 py-3 border-t border-gray-100 flex items-center justify-between shadow-[0_-2px_10px_rgba(0,0,0,0.03)]">
             <span className="text-sm text-gray-500">Trang {page} / {data?.totalPages}</span>
             <div className="flex gap-2">
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
@@ -437,7 +458,7 @@ export default function Customers() {
                     <option value="">Chưa rõ</option>
                     {activeProducts.map(p => (
                       <option key={p.id} value={String(p.id)}>
-                        {p.name}{p.price ? ` — ${(p.price/1000).toFixed(0)}K` : ""}
+                        {p.name}{p.price ? ` — ${(p.price / 1000).toFixed(0)}K` : ""}
                       </option>
                     ))}
                   </select>
