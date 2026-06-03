@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Upload, X, Download, CheckCircle, AlertCircle } from "lucide-react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
-import type { Product } from "../lib/types";
+import type { Group, Product } from "../lib/types";
 import { STATUS_LABELS } from "./StatusBadge";
 
 // ── Mapping trạng thái từ tiếng Việt thường gặp → code
@@ -14,6 +14,8 @@ const STATUS_MAP: Record<string, string> = {
   "tiềm năng": "potential",
   "dùng thử": "trial",
   "thử": "trial",
+  "đang tư vấn": "consulting",
+  "tư vấn": "consulting",
   "đã chốt": "closed",
   "chốt": "closed",
   "không phù hợp": "lost",
@@ -22,20 +24,40 @@ const STATUS_MAP: Record<string, string> = {
   "contacting": "contacting",
   "potential": "potential",
   "trial": "trial",
+  "consulting": "consulting",
   "closed": "closed",
   "lost": "lost",
 };
 
+// ── Map trạng thái → group_id dựa trên pipeline thực tế
+function statusToGroupId(rawStatus: string, groups: Group[]): number | null {
+  const s = rawStatus.toLowerCase().trim();
+  const nonWon = [...groups].filter(g => !g.is_won).sort((a, b) => a.order_index - b.order_index);
+  const won = [...groups].filter(g => g.is_won).sort((a, b) => a.order_index - b.order_index);
+
+  if (s === "đã chốt" || s === "chốt") return won[0]?.id ?? null;
+  if (s === "dùng thử" || s === "thử" || s === "đang tư vấn" || s === "tư vấn")
+    return nonWon[nonWon.length - 1]?.id ?? null;
+  if (s === "tiềm năng" || s === "đang liên hệ" || s === "liên hệ")
+    return nonWon[1]?.id ?? null;
+  return null;
+}
+
 // ── Cột template cố định (theo thứ tự)
 const TEMPLATE_HEADERS = [
   "Tên KH", "SĐT/Zalo", "Email", "Link FB",
-  "Nguồn", "Sản phẩm", "Trạng thái", "Sale phụ trách",
-  "Giá niêm yết", "Giảm giá (%)", "Giá chốt", "Ghi chú",
+  "Công ty", "Nguồn", "Sản phẩm", "Trạng thái", "Sale phụ trách",
+  "Ngày nhận", "Giá niêm yết", "Giảm giá (%)", "Giá chốt", "Ghi chú",
 ];
 
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split("\n");
+  const firstLine = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")[0] ?? "";
+  const delimiters = [",", ";", "\t"];
+  const delimiter = delimiters
+    .map(d => ({ d, count: firstLine.split(d).length }))
+    .sort((a, b) => b.count - a.count)[0]?.d ?? ",";
+  const lines = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim().split("\n");
   for (const line of lines) {
     if (!line.trim()) continue;
     const fields: string[] = [];
@@ -43,8 +65,9 @@ function parseCSV(text: string): string[][] {
     let inQ = false;
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
-      if (ch === '"') { inQ = !inQ; }
-      else if ((ch === "," || ch === "\t") && !inQ) { fields.push(cur.trim()); cur = ""; }
+      if (ch === '"' && line[i + 1] === '"' && inQ) { cur += '"'; i++; }
+      else if (ch === '"') { inQ = !inQ; }
+      else if (ch === delimiter && !inQ) { fields.push(cur.trim()); cur = ""; }
       else { cur += ch; }
     }
     fields.push(cur.trim());
@@ -54,28 +77,46 @@ function parseCSV(text: string): string[][] {
 }
 
 function downloadTemplate() {
-  const bom = "﻿"; // UTF-8 BOM cho Excel đọc được tiếng Việt
-  const header = TEMPLATE_HEADERS.join(",");
-  const example = [
-    "Nguyễn Văn A", "0912345678", "email@gmail.com", "https://fb.com/...",
-    "Facebook", "Pre90", "Mới", "Mai Phương",
-    "590000", "30", "413000", "Khách quan tâm nhiều",
-  ].join(",");
-  const csv = bom + header + "\n" + example;
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = "template_import_crm.csv"; a.click();
-  URL.revokeObjectURL(url);
+  const rows = [
+    TEMPLATE_HEADERS,
+    [
+      "Nguyễn Văn A", "0912345678", "email@gmail.com", "https://fb.com/...",
+      "", "Facebook", "990TOEIC", "Mới", "Khánh Vy",
+      new Date().toISOString().slice(0, 10), "590000", "0", "", "Khách quan tâm nhiều",
+    ],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Leads");
+  XLSX.writeFile(wb, "template_import_crm.xlsx");
 }
 
 type ImportRow = {
-  name: string; phone?: string; email?: string; facebook_link?: string;
-  source?: string; product_id?: number; assigned_to?: string;
-  status?: string; list_price?: number; discount_pct?: number;
-  final_price?: number; note?: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  facebook_link?: string;
+  company?: string;
+  source?: string;
+  product_id?: number;
+  product_name?: string;
+  group_id?: number | null;
+  group_name?: string;
+  assigned_to?: string;
+  status?: string;
+  received_at?: string;
+  list_price?: string | number;
+  discount_pct?: string | number;
+  final_price?: string | number;
+  note?: string;
   created_at?: string;
   updated_at?: string;
+};
+
+type Props = {
+  onClose: () => void;
+  products: Product[];
+  groups: Group[];
 };
 
 function parseExcelDate(val: any): string | undefined {
@@ -125,15 +166,80 @@ function formatDate(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-type Props = { onClose: () => void; products: Product[] };
-
-export default function ImportModal({ onClose, products }: Props) {
+export default function ImportModal({ onClose, products, groups }: Props) {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ imported: number; errors: string[] } | null>(null);
+  const [result, setResult] = useState<{ imported: number; updated: number; skipped: number; errors: string[]; warnings: string[] } | null>(null);
   const [error, setError] = useState("");
+
+  function rowsFromSheet(sheetRows: unknown[][]) {
+    if (sheetRows.length < 2) { setError("File không có dữ liệu."); return; }
+
+    const hdrs = sheetRows[0].map(v => String(v ?? "").trim());
+    const idx = (...names: string[]) => {
+      for (const name of names) {
+        const i = hdrs.findIndex(h => h.toLowerCase().includes(name.toLowerCase()));
+        if (i >= 0) return i;
+      }
+      return -1;
+    };
+
+    const colName = idx("tên", "họ tên", "name");
+    const colPhone = idx("sđt", "phone", "zalo", "điện thoại");
+    const colEmail = idx("email");
+    const colFb = idx("fb", "facebook", "link");
+    const colCompany = idx("công ty", "company", "trường", "trung tâm");
+    const colSource = idx("nguồn", "source");
+    const colProduct = idx("sản phẩm", "product", "khóa", "gói");
+    const colStatus = idx("trạng thái", "giai đoạn", "stage", "status");
+    const colStaff = idx("sale", "nhân viên", "phụ trách");
+    const colReceived = idx("ngày nhận", "ngày tạo", "received", "created");
+    const colListPrice = idx("niêm yết", "list price");
+    const colDiscount = idx("giảm", "discount");
+    const colFinalPrice = idx("giá chốt", "chốt", "thanh toán", "doanh thu");
+    const colNote = idx("ghi chú", "note");
+
+    if (colName < 0) { setError('Không tìm thấy cột "Tên KH". Kiểm tra lại file.'); return; }
+
+    const importRows: ImportRow[] = [];
+    for (let i = 1; i < sheetRows.length; i++) {
+      const r = sheetRows[i].map(v => String(v ?? "").trim());
+      const name = colName >= 0 ? r[colName] : "";
+      if (!name?.trim()) continue;
+
+      let productName = colProduct >= 0 ? r[colProduct]?.trim() : "";
+      if (productName?.toLowerCase() === "pre90") {
+        productName = "990TOEIC";
+      }
+      const product = products.find(p => p.name.toLowerCase() === productName?.toLowerCase());
+      const rawStatus = colStatus >= 0 ? r[colStatus]?.trim() : "";
+      const status = STATUS_MAP[rawStatus.toLowerCase()] ?? (rawStatus || "new");
+      const group_id = rawStatus ? statusToGroupId(rawStatus, groups) : null;
+
+      importRows.push({
+        name: name.trim(),
+        phone: colPhone >= 0 ? r[colPhone]?.trim() || undefined : undefined,
+        email: colEmail >= 0 ? r[colEmail]?.trim() || undefined : undefined,
+        facebook_link: colFb >= 0 ? r[colFb]?.trim() || undefined : undefined,
+        company: colCompany >= 0 ? r[colCompany]?.trim() || undefined : undefined,
+        source: colSource >= 0 ? r[colSource]?.trim() || undefined : undefined,
+        product_id: product?.id ?? undefined,
+        product_name: productName || undefined,
+        group_id,
+        group_name: rawStatus || undefined,
+        assigned_to: colStaff >= 0 ? r[colStaff]?.trim() || undefined : undefined,
+        status,
+        received_at: colReceived >= 0 ? r[colReceived]?.trim() || undefined : undefined,
+        list_price: colListPrice >= 0 ? r[colListPrice]?.trim() || undefined : undefined,
+        discount_pct: colDiscount >= 0 ? r[colDiscount]?.trim() || undefined : undefined,
+        final_price: colFinalPrice >= 0 ? r[colFinalPrice]?.trim() || undefined : undefined,
+        note: colNote >= 0 ? r[colNote]?.trim() || undefined : undefined,
+      });
+    }
+    setRows(importRows);
+  }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -190,9 +296,12 @@ export default function ImportModal({ onClose, products }: Props) {
 
               // Map product name → id
               let productName = colProduct >= 0 ? String(r[colProduct] || "").trim() : "";
+              if (productName.toLowerCase() === "pre90") {
+                productName = "990TOEIC";
+              }
               if (!productName) {
-                if (isLmsSheet) productName = "LMS";
-                else if (is990Sheet) productName = "Pre90";
+                if (isLmsSheet) productName = "Hệ thống LMS";
+                else if (is990Sheet) productName = "990TOEIC";
               }
               const product = products.find(p =>
                 p.name.toLowerCase() === productName?.toLowerCase()
@@ -354,13 +463,14 @@ export default function ImportModal({ onClose, products }: Props) {
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
             <p className="text-sm font-medium text-blue-900 mb-1">Bước 1 — Tải file mẫu</p>
             <p className="text-xs text-blue-700 mb-3">
-              Điền dữ liệu vào file mẫu, sau đó lưu dạng <strong>CSV (UTF-8)</strong> rồi upload lên.
-              <br />Cột "Sản phẩm" cần khớp đúng tên sản phẩm trong hệ thống.
+              Điền dữ liệu vào file mẫu rồi upload lại file Excel.
+              <br />Cột "Sản phẩm" có thể ghi 990TOEIC, LMS/web lms, TOEIC LR, hoặc TOEIC 4 kỹ năng.
+              <br />Trùng SĐT/email sẽ được cập nhật, không tạo lead trùng.
               <br />Cột "Trạng thái": Mới / Đang liên hệ / Tiềm năng / Dùng thử / Đã chốt / Không phù hợp
             </p>
             <button onClick={downloadTemplate}
               className="flex items-center gap-2 text-sm font-medium text-blue-700 bg-white border border-blue-300 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors">
-              <Download size={16} /> Tải file mẫu (.csv)
+              <Download size={16} /> Tải file mẫu (.xlsx)
             </button>
           </div>
 
@@ -406,7 +516,7 @@ export default function ImportModal({ onClose, products }: Props) {
                           <td className="px-3 py-2 text-gray-500">
                             {r.product_id
                               ? products.find(p => p.id === r.product_id)?.name
-                              : "—"}
+                              : r.product_name ?? "—"}
                           </td>
                           <td className="px-3 py-2">
                             <span className="text-gray-600">
@@ -436,8 +546,19 @@ export default function ImportModal({ onClose, products }: Props) {
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-2">
               <div className="flex items-center gap-2 text-green-800 font-medium">
                 <CheckCircle size={18} />
-                Import hoàn tất: <span className="font-bold">{result.imported}</span> khách hàng
+                Import hoàn tất:
+                <span className="font-bold">{result.imported}</span> mới
+                <span className="font-bold">{result.updated}</span> cập nhật
+                {result.skipped > 0 && <><span className="font-bold">{result.skipped}</span> bỏ qua</>}
               </div>
+              {result.warnings.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  <p className="text-xs text-amber-700 font-medium">{result.warnings.length} cảnh báo map dữ liệu:</p>
+                  {result.warnings.slice(0, 5).map((w, i) => (
+                    <p key={i} className="text-xs text-amber-700">• {w}</p>
+                  ))}
+                </div>
+              )}
               {result.errors.length > 0 && (
                 <div className="mt-2 space-y-1">
                   <p className="text-xs text-red-700 font-medium">{result.errors.length} dòng bị lỗi:</p>

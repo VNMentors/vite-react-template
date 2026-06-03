@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { LayoutDashboard, Users, Package, BarChart2, UserCog, LogOut, Bell, Layers } from "lucide-react";
+import { LayoutDashboard, Users, Package, BarChart2, UserCog, LogOut, Bell, Layers, Kanban, MonitorPlay } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 
@@ -53,8 +53,10 @@ export default function Layout({ children }: { children: ReactNode }) {
 
         <nav className="flex-1 p-3 space-y-0.5">
           {navItem("/", <LayoutDashboard size={17} />, "Dashboard", followUpCount)}
-          {navItem("/customers", <Users size={17} />, "Khách hàng")}
-          {isAdmin && navItem("/groups",   <Layers size={17} />,  "Nhóm KH")}
+          {navItem("/customers", <Users size={17} />, "Leads")}
+          {navItem("/pipeline", <Kanban size={17} />, "Pipeline")}
+          {navItem("/lms", <MonitorPlay size={17} />, "LMS Clients")}
+          {isAdmin && navItem("/groups",   <Layers size={17} />,  "Cơ hội")}
           {isAdmin && navItem("/products", <Package size={17} />, "Sản phẩm")}
           {isAdmin && navItem("/reports", <BarChart2 size={17} />, "Báo cáo")}
           {isAdmin && navItem("/users", <UserCog size={17} />, "Nhân viên")}

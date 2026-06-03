@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "vite-react-template",
+	"name": "admin-vnmentors",
 	"main": "./src/worker/index.ts",
 	"compatibility_date": "2025-10-08",
 	"compatibility_flags": ["nodejs_compat"],
@@ -21,6 +21,12 @@
 	],
 	"vars": {
 		"JWT_SECRET": "882fe41ca689c28079044af1ce0f66713ef297cac23e5d72acd90398bd20582f"
-	}
+	},
+	"kv_namespaces": [
+		{
+			"binding": "LMS_KV",
+			"id": "45c4e8adde3341bfaeed21c9c2f0dcd0"
+		}
+	],
 
 }

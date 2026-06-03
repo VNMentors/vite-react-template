@@ -11,12 +11,14 @@ import Users from "./pages/Users";
 import Products from "./pages/Products";
 import Reports from "./pages/Reports";
 import Groups from "./pages/Groups";
+import Pipeline from "./pages/Pipeline";
+import LmsClients from "./pages/LmsClients";
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 1000 * 60,
+      staleTime: 1000 * 60 * 2, // 2 phút mặc định
     },
   },
 });
@@ -84,6 +86,10 @@ export default function App() {
               }
             />
             <Route
+              path="/pipeline"
+              element={<ProtectedRoute><Layout><Pipeline /></Layout></ProtectedRoute>}
+            />
+            <Route
               path="/users"
               element={
                 <ProtectedRoute>
@@ -92,6 +98,10 @@ export default function App() {
                   </Layout>
                 </ProtectedRoute>
               }
+            />
+            <Route
+              path="/lms"
+              element={<ProtectedRoute><Layout><LmsClients /></Layout></ProtectedRoute>}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

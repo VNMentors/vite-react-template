@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Users, Trophy, TrendingUp, ToggleLeft, ToggleRight } from "lucide-react";
 import { api } from "../lib/api";
 import type { Product } from "../lib/types";
 
+function fmtMoney(v: number) {
+  if (!v) return "—";
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + "M";
+  if (v >= 1_000) return Math.round(v / 1_000) + "K";
+  return v.toLocaleString("vi-VN");
+}
+
 type ProductForm = { name: string; price: string; description: string };
 const emptyForm: ProductForm = { name: "", price: "", description: "" };
-
-function fmtMoney(v: number) {
-  return v.toLocaleString("vi-VN") + "đ";
-}
 
 export default function Products() {
   const qc = useQueryClient();
@@ -22,15 +25,15 @@ export default function Products() {
     queryFn: () => api.getProducts(),
   });
 
-  const createMutation = useMutation({
+  const createMut = useMutation({
     mutationFn: (d: Partial<Product>) => api.createProduct(d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); closeModal(); },
   });
-  const updateMutation = useMutation({
+  const updateMut = useMutation({
     mutationFn: ({ id, d }: { id: number; d: Partial<Product> }) => api.updateProduct(id, d),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); closeModal(); },
   });
-  const deleteMutation = useMutation({
+  const deleteMut = useMutation({
     mutationFn: (id: number) => api.deleteProduct(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); setDeleteConfirm(null); },
   });
@@ -49,18 +52,24 @@ export default function Products() {
       price: Number(form.price) || 0,
       description: form.description || null,
     };
-    if (modal.product) updateMutation.mutate({ id: modal.product.id, d: payload });
-    else createMutation.mutate(payload);
+    if (modal.product) updateMut.mutate({ id: modal.product.id, d: payload });
+    else createMut.mutate(payload);
   }
 
-  const isPending = createMutation.isPending || updateMutation.isPending;
+  function toggleActive(p: Product) {
+    updateMut.mutate({ id: p.id, d: { active: p.active ? 0 : 1 } });
+  }
+
+  const isPending = createMut.isPending || updateMut.isPending;
+  const activeProducts   = products.filter((p: Product) => p.active);
+  const inactiveProducts = products.filter((p: Product) => !p.active);
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Sản phẩm</h2>
-          <p className="text-gray-500 mt-1">Quản lý danh sách sản phẩm và giá</p>
+          <p className="text-gray-500 mt-1 text-sm">{activeProducts.length} đang bán · {inactiveProducts.length} đã ẩn</p>
         </div>
         <button onClick={openAdd}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
@@ -68,45 +77,40 @@ export default function Products() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
-              <th className="text-left px-6 py-3 font-medium">Tên sản phẩm</th>
-              <th className="text-left px-6 py-3 font-medium">Giá niêm yết</th>
-              <th className="text-left px-6 py-3 font-medium">Mô tả</th>
-              <th className="px-6 py-3 w-20"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {isLoading ? (
-              <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-400">Đang tải...</td></tr>
-            ) : products.length === 0 ? (
-              <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-400">Chưa có sản phẩm nào</td></tr>
-            ) : (
-              products.map((p: Product) => (
-                <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-gray-900">{p.name}</td>
-                  <td className="px-6 py-4 font-semibold text-blue-700">{fmtMoney(p.price)}</td>
-                  <td className="px-6 py-4 text-gray-500">{p.description ?? "—"}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-1 justify-end">
-                      <button onClick={() => openEdit(p)}
-                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => setDeleteConfirm(p.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {isLoading ? (
+        <div className="text-center py-16 text-gray-400">Đang tải...</div>
+      ) : (
+        <div className="space-y-6">
+          {/* Active products */}
+          <div className="space-y-3">
+            {activeProducts.map((p: Product) => (
+              <ProductCard key={p.id} product={p}
+                onEdit={() => openEdit(p)}
+                onToggle={() => toggleActive(p)}
+                onDelete={() => setDeleteConfirm(p.id)} />
+            ))}
+          </div>
+
+          {/* Inactive */}
+          {inactiveProducts.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Đã ẩn</p>
+              <div className="space-y-2 opacity-60">
+                {inactiveProducts.map((p: Product) => (
+                  <ProductCard key={p.id} product={p}
+                    onEdit={() => openEdit(p)}
+                    onToggle={() => toggleActive(p)}
+                    onDelete={() => setDeleteConfirm(p.id)} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {products.length === 0 && (
+            <p className="text-center py-12 text-gray-400">Chưa có sản phẩm nào</p>
+          )}
+        </div>
+      )}
 
       {/* Modal */}
       {modal.open && (
@@ -120,7 +124,7 @@ export default function Products() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tên sản phẩm *</label>
                 <input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="Pre90, 30 Ngày..."
+                  placeholder="990TOEIC, Hệ thống LMS..."
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
@@ -136,16 +140,11 @@ export default function Products() {
                   rows={2} placeholder="Ghi chú về sản phẩm..."
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </div>
-              {(createMutation.error ?? updateMutation.error) && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
-                  {(createMutation.error ?? updateMutation.error)?.message}
-                </div>
-              )}
               <div className="flex justify-end gap-3 pt-1">
                 <button type="button" onClick={closeModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Hủy</button>
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Hủy</button>
                 <button type="submit" disabled={isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
                   {isPending ? "Đang lưu..." : modal.product ? "Cập nhật" : "Thêm"}
                 </button>
               </div>
@@ -158,18 +157,88 @@ export default function Products() {
       {deleteConfirm !== null && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold mb-2">Xóa sản phẩm?</h3>
-            <p className="text-gray-500 text-sm mb-6">Các lead liên quan sẽ mất thông tin sản phẩm.</p>
+            <h3 className="text-lg font-semibold mb-2">Ẩn/xóa sản phẩm?</h3>
+            <p className="text-gray-500 text-sm mb-6">Nếu sản phẩm đã có lead, deal hoặc gói mua, hệ thống sẽ ẩn thay vì xóa để giữ báo cáo đúng.</p>
             <div className="flex gap-3">
               <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200">Hủy</button>
-              <button onClick={() => deleteMutation.mutate(deleteConfirm)} disabled={deleteMutation.isPending}
+              <button onClick={() => deleteMut.mutate(deleteConfirm)} disabled={deleteMut.isPending}
                 className="flex-1 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
-                {deleteMutation.isPending ? "Đang xóa..." : "Xóa"}
+                {deleteMut.isPending ? "Đang xóa..." : "Xóa"}
               </button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ProductCard({ product: p, onEdit, onToggle, onDelete }: {
+  product: Product;
+  onEdit: () => void;
+  onToggle: () => void;
+  onDelete: () => void;
+}) {
+  const cr = (p.lead_count ?? 0) > 0 ? Math.round(((p.won_count ?? 0) / (p.lead_count ?? 1)) * 100) : 0;
+
+  return (
+    <div className={`bg-white border rounded-xl p-5 flex items-center gap-5 ${p.active ? "border-gray-200" : "border-gray-100"}`}>
+      {/* Color dot */}
+      <div className={`w-3 h-3 rounded-full flex-shrink-0 ${p.active ? "bg-green-400" : "bg-gray-300"}`} />
+
+      {/* Name + price */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-3">
+          <span className="font-semibold text-gray-900">{p.name}</span>
+          {p.price > 0 && (
+            <span className="text-sm font-medium text-blue-700">
+              {p.price.toLocaleString("vi-VN")}đ
+            </span>
+          )}
+          {!p.active && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Ẩn</span>}
+        </div>
+        {p.description && <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>}
+      </div>
+
+      {/* Stats */}
+      <div className="flex items-center gap-5 flex-shrink-0">
+        <div className="text-center">
+          <div className="flex items-center gap-1 text-gray-500 text-xs mb-0.5">
+            <Users size={11} /> leads
+          </div>
+          <span className="font-bold text-gray-900 text-sm">{p.lead_count ?? 0}</span>
+        </div>
+        <div className="text-center">
+          <div className="flex items-center gap-1 text-gray-500 text-xs mb-0.5">
+            <Trophy size={11} /> chốt
+          </div>
+          <span className="font-bold text-green-700 text-sm">{p.won_count ?? 0}</span>
+        </div>
+        <div className="text-center">
+          <div className="flex items-center gap-1 text-gray-500 text-xs mb-0.5">
+            <TrendingUp size={11} /> CR
+          </div>
+          <span className={`font-bold text-sm ${cr >= 20 ? "text-green-600" : cr >= 10 ? "text-amber-600" : "text-gray-500"}`}>{cr}%</span>
+        </div>
+        <div className="text-center">
+          <div className="text-gray-500 text-xs mb-0.5">Doanh thu</div>
+          <span className="font-bold text-emerald-700 text-sm">{fmtMoney(p.revenue ?? 0)}đ</span>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <button onClick={onToggle} title={p.active ? "Ẩn sản phẩm" : "Hiện lại"}
+          className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
+          {p.active ? <ToggleRight size={18} className="text-green-500" /> : <ToggleLeft size={18} />}
+        </button>
+        <button onClick={onEdit} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
+          <Pencil size={14} />
+        </button>
+        <button onClick={onDelete} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+          <Trash2 size={14} />
+        </button>
+      </div>
     </div>
   );
 }

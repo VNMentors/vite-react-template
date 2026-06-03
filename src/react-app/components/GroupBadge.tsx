@@ -2,7 +2,7 @@ import type { Customer, Group } from "../lib/types";
 
 export function GroupBadge({ customer }: { customer: Pick<Customer, "group_name" | "group_color"> }) {
   if (!customer.group_name) {
-    return <span className="text-xs text-gray-400 italic">Chưa phân nhóm</span>;
+    return <span className="text-xs text-gray-400 italic">Chưa có cơ hội</span>;
   }
   return (
     <span

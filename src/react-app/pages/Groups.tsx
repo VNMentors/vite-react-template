@@ -68,25 +68,24 @@ export default function Groups() {
     <div className="p-8 max-w-3xl">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Cài đặt nhóm khách hàng</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Giai đoạn cơ hội</h2>
           <p className="text-gray-500 mt-1 text-sm">
-            Tùy chỉnh quy trình phân loại lead theo đặc thù kinh doanh của bạn
+            Định nghĩa các bước trong quy trình bán hàng của bạn
           </p>
         </div>
         <button onClick={openAdd}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-          <Plus size={17} /> Thêm nhóm
+          <Plus size={17} /> Thêm giai đoạn
         </button>
       </div>
 
       {/* Hướng dẫn */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 text-sm text-blue-800">
         <p className="font-medium mb-1">💡 Cách hoạt động</p>
-        <p>Mỗi khách hàng thuộc 1 nhóm. Nhóm đánh dấu <strong>Đã chốt ✓</strong> sẽ được tính vào doanh thu báo cáo.
-        Kéo thứ tự để thể hiện đúng quy trình chuyển đổi của bạn.</p>
+        <p>Mỗi lead thuộc 1 giai đoạn cơ hội trong pipeline. Giai đoạn đánh dấu <strong>Đã chốt ✓</strong> sẽ
+        được tính vào doanh thu báo cáo. Sắp xếp thứ tự để thể hiện đúng quy trình chuyển đổi.</p>
       </div>
 
-      {/* Danh sách nhóm */}
       {isLoading ? (
         <div className="text-gray-400 text-center py-10">Đang tải...</div>
       ) : (
@@ -99,21 +98,19 @@ export default function Groups() {
                 <button
                   onClick={() => reorderMutation.mutate({ id: g.id, dir: "up" })}
                   disabled={i === 0 || reorderMutation.isPending}
-                  className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors">
+                  className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20">
                   <ChevronUp size={16} />
                 </button>
                 <button
                   onClick={() => reorderMutation.mutate({ id: g.id, dir: "down" })}
                   disabled={i === groups.length - 1 || reorderMutation.isPending}
-                  className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors">
+                  className="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20">
                   <ChevronDown size={16} />
                 </button>
               </div>
 
-              {/* Color dot */}
               <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
 
-              {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <GroupTag group={g} />
@@ -128,20 +125,18 @@ export default function Groups() {
                 )}
               </div>
 
-              {/* Customer count */}
               <div className="text-center flex-shrink-0">
                 <div className="text-lg font-bold text-gray-900">{g.customer_count ?? 0}</div>
-                <div className="text-xs text-gray-400">khách</div>
+                <div className="text-xs text-gray-400">leads</div>
               </div>
 
-              {/* Actions */}
               <div className="flex gap-1 flex-shrink-0">
                 <button onClick={() => openEdit(g)}
-                  className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                  className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
                   <Pencil size={15} />
                 </button>
                 <button onClick={() => setDeleteConfirm(g)}
-                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
                   <Trash2 size={15} />
                 </button>
               </div>
@@ -150,23 +145,23 @@ export default function Groups() {
         </div>
       )}
 
-      {/* Add/Edit Modal */}
+      {/* Modal */}
       {modal.open && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold">
-                {modal.group ? "Sửa nhóm" : "Thêm nhóm mới"}
+                {modal.group ? "Sửa giai đoạn" : "Thêm giai đoạn mới"}
               </h3>
               <button onClick={closeModal} className="p-2 hover:bg-gray-100 rounded-lg"><X size={18} /></button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tên nhóm *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tên giai đoạn *</label>
                 <input required value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="Nhóm 1, Đã tư vấn, Chốt đơn..."
+                  placeholder="Đang tư vấn, Đã gửi báo giá, Chốt đơn..."
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
 
@@ -174,7 +169,7 @@ export default function Groups() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
                 <textarea value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="Mô tả tiêu chí khách hàng thuộc nhóm này..."
+                  placeholder="Tiêu chí để lead thuộc giai đoạn này..."
                   rows={2}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </div>
@@ -191,13 +186,11 @@ export default function Groups() {
                     />
                   ))}
                 </div>
-                {/* Preview */}
                 <div className="mt-3 flex items-center gap-2">
                   <span className="text-xs text-gray-500">Xem trước:</span>
-                  <span
-                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold text-white"
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold text-white"
                     style={{ backgroundColor: form.color }}>
-                    {form.name || "Tên nhóm"}
+                    {form.name || "Tên giai đoạn"}
                   </span>
                 </div>
               </div>
@@ -211,9 +204,9 @@ export default function Groups() {
                   <div>
                     <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
                       <Trophy size={14} className={form.is_won ? "text-green-600" : "text-gray-400"} />
-                      Đánh dấu là "Đã chốt"
+                      Đánh dấu là "Đã chốt" (Won)
                     </div>
-                    <div className="text-xs text-gray-500">Khách trong nhóm này sẽ được tính doanh thu</div>
+                    <div className="text-xs text-gray-500">Leads ở giai đoạn này được tính vào doanh thu</div>
                   </div>
                 </label>
               </div>
@@ -226,12 +219,12 @@ export default function Groups() {
 
               <div className="flex justify-end gap-3 pt-1">
                 <button type="button" onClick={closeModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
                   Hủy
                 </button>
                 <button type="submit" disabled={isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                  {isPending ? "Đang lưu..." : modal.group ? "Cập nhật" : "Thêm nhóm"}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                  {isPending ? "Đang lưu..." : modal.group ? "Cập nhật" : "Thêm giai đoạn"}
                 </button>
               </div>
             </form>
@@ -243,11 +236,11 @@ export default function Groups() {
       {deleteConfirm !== null && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold mb-2">Xóa nhóm "{deleteConfirm.name}"?</h3>
+            <h3 className="text-lg font-semibold mb-2">Xóa giai đoạn "{deleteConfirm.name}"?</h3>
             {(deleteConfirm.customer_count ?? 0) > 0 ? (
               <p className="text-red-600 text-sm mb-6">
-                Nhóm này còn <strong>{deleteConfirm.customer_count}</strong> khách hàng.
-                Hãy chuyển họ sang nhóm khác trước khi xóa.
+                Giai đoạn này còn <strong>{deleteConfirm.customer_count}</strong> leads.
+                Hãy chuyển họ sang giai đoạn khác trước khi xóa.
               </p>
             ) : (
               <p className="text-gray-500 text-sm mb-6">Hành động này không thể hoàn tác.</p>
