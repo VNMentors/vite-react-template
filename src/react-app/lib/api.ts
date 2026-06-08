@@ -75,7 +75,19 @@ export const api = {
     request<{ success: boolean; deleted?: boolean; deactivated?: boolean; references?: number }>(`/products/${id}`, { method: "DELETE" }),
 
   // Customers
-  getCustomers: (params?: { q?: string; group_id?: string; product_id?: string; assigned_to?: string; follow_up_today?: string; page?: number }) => {
+  getCustomers: (params?: {
+    q?: string;
+    group_id?: string;
+    product_id?: string;
+    assigned_to?: string;
+    follow_up_today?: string;
+    page?: number;
+    status?: string;
+    from_date?: string;
+    to_date?: string;
+    sort_by?: string;
+    sort_order?: string;
+  }) => {
     const qs = new URLSearchParams();
     if (params?.q) qs.set("q", params.q);
     if (params?.group_id) qs.set("group_id", params.group_id);
@@ -83,6 +95,11 @@ export const api = {
     if (params?.assigned_to) qs.set("assigned_to", params.assigned_to);
     if (params?.follow_up_today) qs.set("follow_up_today", params.follow_up_today);
     if (params?.page) qs.set("page", String(params.page));
+    if (params?.status) qs.set("status", params.status);
+    if (params?.from_date) qs.set("from_date", params.from_date);
+    if (params?.to_date) qs.set("to_date", params.to_date);
+    if (params?.sort_by) qs.set("sort_by", params.sort_by);
+    if (params?.sort_order) qs.set("sort_order", params.sort_order);
     return request<{ customers: Customer[]; total: number; page: number; totalPages: number }>(`/customers?${qs}`);
   },
   getCustomer: (id: number) => request<Customer>(`/customers/${id}`),

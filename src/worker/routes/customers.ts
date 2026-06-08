@@ -122,6 +122,11 @@ customers.get("/", async (c) => {
   const productId = c.req.query("product_id") ?? "";
   const assignedTo = c.req.query("assigned_to") ?? "";
   const followUpToday = c.req.query("follow_up_today") === "1";
+  const status = c.req.query("status") ?? "";
+  const fromDate = c.req.query("from_date") ?? "";
+  const toDate = c.req.query("to_date") ?? "";
+  const sortBy = c.req.query("sort_by") ?? "";
+  const sortOrder = c.req.query("sort_order") ?? "desc";
   const page = Math.max(1, parseInt(c.req.query("page") ?? "1"));
   const limit = 20;
   const offset = (page - 1) * limit;
@@ -151,15 +156,24 @@ customers.get("/", async (c) => {
   if (followUpToday) {
     conds.push("DATE(c.follow_up_at) <= DATE('now') AND c.follow_up_at IS NOT NULL AND (c.group_id IS NULL OR c.group_id NOT IN (SELECT id FROM groups WHERE is_won=1))");
   }
+  if (status) { conds.push("c.status = ?"); params.push(status); }
+  if (fromDate) { conds.push("DATE(c.created_at) >= DATE(?)"); params.push(fromDate); }
+  if (toDate) { conds.push("DATE(c.created_at) <= DATE(?)"); params.push(toDate); }
 
   const where = (conds.length > 0 ? conds.join(" AND ") : "1=1") + " " + roleClause;
+
+  let orderBy = "c.follow_up_at ASC NULLS LAST, c.created_at DESC";
+  if (sortBy === "created_at" || sortBy === "date") {
+    const order = sortOrder.toLowerCase() === "asc" ? "ASC" : "DESC";
+    orderBy = `c.created_at ${order}`;
+  }
 
   const listP = [...params, ...roleParams, limit, offset];
   const countP = [...params, ...roleParams];
 
   const [rows, countRow] = await Promise.all([
     c.env.DB.prepare(
-      `${SELECT_CUSTOMER} WHERE ${where} ORDER BY c.follow_up_at ASC NULLS LAST, c.created_at DESC LIMIT ? OFFSET ?`
+      `${SELECT_CUSTOMER} WHERE ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`
     ).bind(...listP).all<Customer>(),
     c.env.DB.prepare(
       `SELECT COUNT(*) as count FROM customers c WHERE ${where}`
