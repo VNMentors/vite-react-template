@@ -20,6 +20,10 @@
 		}
 	],
 	"vars": {
+		"EMAIL_API_URL": "https://us-central1-toeicmentors-6e1ab.cloudfunctions.net/api/email/send",
+		"EMAIL_FROM": "VNMentors <contact@vnmentors.edu.vn>",
+		"EMAIL_BATCH_SIZE": "50",
+		"EMAIL_MAX_RETRY": "3"
 	},
 	"kv_namespaces": [
 		{
@@ -27,5 +31,7 @@
 			"id": "45c4e8adde3341bfaeed21c9c2f0dcd0"
 		}
 	],
-
+	"triggers": {
+		"crons": ["*/5 * * * *"]
+	}
 }

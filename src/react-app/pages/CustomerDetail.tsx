@@ -8,6 +8,7 @@ import {
 import { api } from "../lib/api";
 import type { Customer, Product } from "../lib/types";
 import { GroupBadge } from "../components/GroupBadge";
+import EmailComposeModal from "../components/EmailComposeModal";
 
 function fmtMoney(v: number | null | undefined) {
   if (v == null) return null;
@@ -94,6 +95,7 @@ export default function CustomerDetail() {
   });
   const [lmsSuccess, setLmsSuccess] = useState(false);
   const [lmsError, setLmsError] = useState("");
+  const [emailModal, setEmailModal] = useState(false);
 
   const { data: customer, isLoading } = useQuery({
     queryKey: ["customer", customerId],
@@ -331,9 +333,18 @@ export default function CustomerDetail() {
                   </div>
                 )}
                 {customer.email && (
-                  <div className="flex items-center gap-3 text-sm">
-                    <Mail size={15} className="text-gray-400 flex-shrink-0" />
-                    <a href={`mailto:${customer.email}`} className="text-gray-700 hover:text-blue-600 truncate">{customer.email}</a>
+                  <div className="flex items-center justify-between text-sm group/email-row">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Mail size={15} className="text-gray-400 flex-shrink-0" />
+                      <a href={`mailto:${customer.email}`} className="text-gray-700 hover:text-blue-600 truncate">{customer.email}</a>
+                    </div>
+                    <button
+                      onClick={() => setEmailModal(true)}
+                      className="ml-2 px-2 py-1 text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded transition-all flex items-center gap-1 font-medium cursor-pointer"
+                      title="Gửi email soạn thảo"
+                    >
+                      <Mail size={11} /> Gửi thư
+                    </button>
                   </div>
                 )}
                 {customer.facebook_link && (
@@ -573,6 +584,18 @@ export default function CustomerDetail() {
           </div>
         </div>
       )}
+      {/* Single Email compose modal */}
+      <EmailComposeModal
+        isOpen={emailModal}
+        onClose={() => setEmailModal(false)}
+        customerIds={[customer.id]}
+        recipientCount={1}
+        onSuccess={() => {
+          setEmailModal(false);
+          // Add a note that an email was sent
+          addNoteMut.mutate({ content: "Đã tạo chiến dịch gửi email chăm sóc tới khách hàng.", type: "email" });
+        }}
+      />
     </div>
   );
 }

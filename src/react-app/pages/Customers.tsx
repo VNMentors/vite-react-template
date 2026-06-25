@@ -4,12 +4,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Search, Pencil, Trash2, ChevronLeft, ChevronRight,
   X, Upload, Clock, AlertCircle, UserPlus, Shuffle, Layers,
+  Filter, Mail,
 } from "lucide-react";
 import { api } from "../lib/api";
 import type { Customer, Group, Product } from "../lib/types";
 import { GroupBadge } from "../components/GroupBadge";
 import { StatusBadge } from "../components/StatusBadge";
 import ImportModal from "../components/ImportModal";
+import EmailComposeModal from "../components/EmailComposeModal";
 import { useAuth } from "../hooks/useAuth";
 
 const SOURCE_OPTIONS = [
@@ -98,6 +100,7 @@ export default function Customers() {
   const [toDate, setToDate]           = useState("");
   const [sortBy, setSortBy]           = useState("created_at");
   const [sortOrder, setSortOrder]     = useState("desc");
+  const [showFilterSidebar, setShowFilterSidebar] = useState(false);
 
   // Modals
   const [modal, setModal]         = useState<{ open: boolean; customer?: Customer }>({ open: false });
@@ -111,7 +114,7 @@ export default function Customers() {
 
   // Multi-select
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkModal, setBulkModal] = useState<"assign" | "stage" | "distribute" | null>(null);
+  const [bulkModal, setBulkModal] = useState<"assign" | "stage" | "distribute" | "email" | null>(null);
 
   useEffect(() => {
     if (stageFor === null) return;
@@ -235,6 +238,14 @@ export default function Customers() {
   }
 
   const hasFilter = !!groupFilter || !!productFilter || !!search || !!statusFilter || !!fromDate || !!toDate || sortBy !== "created_at" || sortOrder !== "desc";
+  const activeFilterCount = [
+    !!groupFilter,
+    !!productFilter,
+    !!search,
+    !!statusFilter,
+    !!fromDate,
+    !!toDate,
+  ].filter(Boolean).length;
   const isPending = createMut.isPending || updateMut.isPending;
 
   return (
@@ -257,52 +268,32 @@ export default function Customers() {
         </div>
       </div>
 
-      {/* Search + clear */}
-      <div className="flex flex-col gap-3 mb-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input value={search} onChange={handleSearch} placeholder="Tên, SĐT, email..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-
-          {/* Date range filter */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-gray-500 font-medium">Từ ngày:</span>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => { setFromDate(e.target.value); setPage(1); }}
-              className="border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-gray-700"
-            />
-            <span className="text-xs text-gray-500 font-medium">Đến:</span>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => { setToDate(e.target.value); setPage(1); }}
-              className="border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-gray-700"
-            />
-          </div>
-
-          {/* Sắp xếp */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 font-medium">Sắp xếp:</span>
-            <select
-              value={sortOrder}
-              onChange={(e) => {
-                setSortBy("created_at");
-                setSortOrder(e.target.value);
-                setPage(1);
-              }}
-              className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-gray-700 cursor-pointer"
-            >
-              <option value="desc">Ngày nhận: Mới nhất</option>
-              <option value="asc">Ngày nhận: Cũ nhất</option>
-            </select>
-          </div>
-
-          {hasFilter && (
-            <button onClick={() => {
+      {/* Quick Search and Filter Sidebar Toggle */}
+      <div className="flex gap-3 mb-6 items-center">
+        <div className="relative flex-1 max-w-md">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input value={search} onChange={handleSearch} placeholder="Tìm kiếm nhanh tên, SĐT, email..."
+            className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" />
+        </div>
+        <button
+          onClick={() => setShowFilterSidebar(true)}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all cursor-pointer ${
+            hasFilter
+              ? "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 font-semibold"
+              : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50 font-medium"
+          } shadow-sm`}
+        >
+          <Filter size={15} />
+          Bộ lọc
+          {activeFilterCount > 0 && (
+            <span className="flex items-center justify-center bg-blue-600 text-white text-[11px] font-bold h-5 min-w-[20px] px-1 rounded-full animate-bounce">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+        {hasFilter && (
+          <button
+            onClick={() => {
               setGroupFilter("");
               setProductFilter("");
               setSearch("");
@@ -313,66 +304,11 @@ export default function Customers() {
               setSortOrder("desc");
               setPage(1);
             }}
-              className="text-xs text-red-600 hover:text-red-700 font-semibold px-3 py-1.5 border border-red-200 rounded-lg bg-red-50 hover:bg-red-100 transition-colors cursor-pointer">
-              Xóa bộ lọc
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Filter: Cơ hội */}
-      {(groups as Group[]).length > 0 && (
-        <div className="flex gap-2 mb-2 flex-wrap items-center">
-          <span className="text-xs text-gray-400 w-14 flex-shrink-0">Cơ hội:</span>
-          <button onClick={() => { setGroupFilter(""); setPage(1); }}
-            className={`px-3 py-1 rounded-full text-xs font-medium ${!groupFilter ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-            Tất cả
-          </button>
-          <button onClick={() => { setGroupFilter("none"); setPage(1); }}
-            className={`px-3 py-1 rounded-full text-xs font-medium ${groupFilter === "none" ? "bg-gray-700 text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
-            Chưa có cơ hội
-          </button>
-          {(groups as Group[]).map(g => (
-            <button key={g.id} onClick={() => { setGroupFilter(String(g.id)); setPage(1); }}
-              className={`px-3 py-1 rounded-full text-xs font-semibold text-white transition-opacity ${groupFilter === String(g.id) ? "opacity-100 ring-2 ring-offset-1" : "opacity-65 hover:opacity-100"}`}
-              style={{ backgroundColor: g.color, outlineColor: g.color }}>
-              {g.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Filter: Sản phẩm */}
-      {activeProducts.length > 0 && (
-        <div className="flex gap-2 mb-2 flex-wrap items-center">
-          <span className="text-xs text-gray-400 w-14 flex-shrink-0">Sản phẩm:</span>
-          <button onClick={() => { setProductFilter(""); setPage(1); }}
-            className={`px-3 py-1 rounded-full text-xs font-medium ${!productFilter ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-            Tất cả
-          </button>
-          {activeProducts.map(p => (
-            <button key={p.id} onClick={() => { setProductFilter(String(p.id)); setPage(1); }}
-              className={`px-3 py-1 rounded-full text-xs font-medium ${productFilter === String(p.id) ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-              {p.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Filter: Trạng thái */}
-      <div className="flex gap-2 mb-4 flex-wrap items-center">
-        <span className="text-xs text-gray-400 w-14 flex-shrink-0">Trạng thái:</span>
-        <button onClick={() => { setStatusFilter(""); setPage(1); }}
-          className={`px-3 py-1 rounded-full text-xs font-medium ${!statusFilter ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-          Tất cả
-        </button>
-        {STATUS_OPTIONS.map(s => (
-          <button key={s.value} onClick={() => { setStatusFilter(s.value); setPage(1); }}
-            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${statusFilter === s.value ? s.activeColor : s.color}`}
+            className="text-xs text-red-600 hover:text-red-700 font-semibold px-3 py-2.5 border border-red-200 rounded-xl bg-red-50 hover:bg-red-100 transition-colors shadow-sm cursor-pointer"
           >
-            {s.label}
+            Xóa bộ lọc
           </button>
-        ))}
+        )}
       </div>
 
       {/* Table */}
@@ -520,6 +456,10 @@ export default function Customers() {
           <button onClick={() => setBulkModal("stage")}
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors">
             <Layers size={14} /> Đổi giai đoạn
+          </button>
+          <button onClick={() => setBulkModal("email")}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors">
+            <Mail size={14} /> Gửi Email
           </button>
           <button onClick={() => setSelected(new Set())}
             className="text-white/50 hover:text-white p-1 ml-1"><X size={16} /></button>
@@ -679,6 +619,227 @@ export default function Customers() {
       )}
 
       {showImport && <ImportModal products={products as Product[]} groups={groups as Group[]} onClose={() => setShowImport(false)} />}
+
+      {/* ── Filter Sidebar ── */}
+      {showFilterSidebar && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/40 z-50 transition-opacity animate-fade-in"
+            onClick={() => setShowFilterSidebar(false)}
+          />
+          {/* Sidebar Panel */}
+          <div className="fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-50 flex flex-col animate-slide-in border-l border-gray-200">
+            {/* Sidebar Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Filter size={18} className="text-gray-700" />
+                <h3 className="font-semibold text-gray-900 text-base">Bộ lọc tìm kiếm</h3>
+              </div>
+              <button
+                onClick={() => setShowFilterSidebar(false)}
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-700 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Sidebar Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Search */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Tìm kiếm</label>
+                <div className="relative">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={search}
+                    onChange={handleSearch}
+                    placeholder="Tên, SĐT, email..."
+                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Sắp xếp */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Sắp xếp</label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => {
+                    setSortBy("created_at");
+                    setSortOrder(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 cursor-pointer font-medium"
+                >
+                  <option value="desc">Ngày nhận: Mới nhất</option>
+                  <option value="asc">Ngày nhận: Cũ nhất</option>
+                </select>
+              </div>
+
+              {/* Lọc thời gian */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Thời gian nhận</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[11px] text-gray-400 font-medium">Từ ngày:</span>
+                    <input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => { setFromDate(e.target.value); setPage(1); }}
+                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-gray-400 font-medium">Đến ngày:</span>
+                    <input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => { setToDate(e.target.value); setPage(1); }}
+                      className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Trạng thái */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Trạng thái</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => { setStatusFilter(""); setPage(1); }}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
+                      !statusFilter
+                        ? "bg-gray-900 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    Tất cả
+                  </button>
+                  {STATUS_OPTIONS.map((s) => (
+                    <button
+                      key={s.value}
+                      onClick={() => { setStatusFilter(s.value); setPage(1); }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                        statusFilter === s.value ? s.activeColor : s.color
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cơ hội */}
+              {(groups as Group[]).length > 0 && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Cơ hội</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => { setGroupFilter(""); setPage(1); }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
+                        !groupFilter
+                          ? "bg-gray-900 text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      Tất cả
+                    </button>
+                    <button
+                      onClick={() => { setGroupFilter("none"); setPage(1); }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
+                        groupFilter === "none"
+                          ? "bg-gray-700 text-white"
+                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      }`}
+                    >
+                      Chưa có cơ hội
+                    </button>
+                    {(groups as Group[]).map((g) => (
+                      <button
+                        key={g.id}
+                        onClick={() => { setGroupFilter(String(g.id)); setPage(1); }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold text-white transition-all cursor-pointer ${
+                          groupFilter === String(g.id) ? "opacity-100 ring-2 ring-offset-1 ring-blue-500" : "opacity-65 hover:opacity-100"
+                        }`}
+                        style={{ backgroundColor: g.color }}
+                      >
+                        {g.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sản phẩm */}
+              {activeProducts.length > 0 && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Sản phẩm</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => { setProductFilter(""); setPage(1); }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
+                        !productFilter ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      Tất cả
+                    </button>
+                    {activeProducts.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => { setProductFilter(String(p.id)); setPage(1); }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
+                          productFilter === String(p.id) ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sidebar Footer */}
+            <div className="border-t border-gray-100 p-6 bg-gray-50 flex gap-3">
+              {hasFilter && (
+                <button
+                  onClick={() => {
+                    setGroupFilter("");
+                    setProductFilter("");
+                    setSearch("");
+                    setStatusFilter("");
+                    setFromDate("");
+                    setToDate("");
+                    setSortBy("created_at");
+                    setSortOrder("desc");
+                    setPage(1);
+                  }}
+                  className="flex-1 py-2.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 font-semibold rounded-lg text-sm transition-colors text-center cursor-pointer"
+                >
+                  Xóa bộ lọc
+                </button>
+              )}
+              <button
+                onClick={() => setShowFilterSidebar(false)}
+                className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-800 text-white font-medium rounded-lg text-sm transition-colors text-center cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+      {/* Email compose modal */}
+      <EmailComposeModal
+        isOpen={bulkModal === "email"}
+        onClose={() => setBulkModal(null)}
+        customerIds={[...selected]}
+        recipientCount={selected.size}
+        onSuccess={() => {
+          setSelected(new Set());
+        }}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { Customer, Group, Invoice, LmsClient, LmsInvoice, Note, PipelineCustomer, Product, Reports, Stats, Subscription, User } from "./types";
+﻿import type { Customer, Group, Invoice, LmsClient, LmsInvoice, Note, PipelineCustomer, Product, Reports, Stats, Subscription, User, BackgroundJob, CampaignDetails } from "./types";
 
 const TOKEN_KEY = "crm_token";
 export function getToken() { return localStorage.getItem(TOKEN_KEY); }
@@ -173,4 +173,30 @@ export const api = {
     request<{ success: boolean }>(`/lms/${clientId}/invoices/${invoiceId}/pay`, { method: "PATCH" }),
   deleteLmsInvoice: (clientId: number, invoiceId: number) =>
     request<{ success: boolean }>(`/lms/${clientId}/invoices/${invoiceId}`, { method: "DELETE" }),
+
+  // Email Campaigns
+  getEmailCampaigns: () => request<{ success: boolean; data: BackgroundJob[] }>("/email/campaigns"),
+  getEmailCampaign: (id: number) => request<{ success: boolean; data: CampaignDetails }>(`/email/campaigns/${id}`),
+  getEmailRecipientsCount: () => request<{ success: boolean; count: number }>("/email/recipients-count"),
+  getEmailRecipientsAutocomplete: () => request<{ success: boolean; data: { id: number; name: string; email: string }[] }>("/email/recipients-autocomplete"),
+  createEmailCampaign: (body: { subject: string; htmlContent: string; customerIds: number[]; customEmails?: string[]; status?: 'DRAFT' | 'PENDING' | 'SCHEDULED'; scheduledAt?: string }) =>
+    request<{ success: boolean; message: string; data: { jobId: number; total: number } }>("/email/campaigns", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  startEmailCampaign: (id: number) =>
+    request<{ success: boolean; message: string }>(`/email/campaigns/${id}/start`, { method: "POST" }),
+  cancelEmailCampaign: (id: number) =>
+    request<{ success: boolean; message: string }>(`/email/campaigns/${id}/cancel`, { method: "PATCH" }),
+  testEmailCampaign: (body: { subject: string; htmlContent: string }) =>
+    request<{ success: boolean; message: string }>("/email/campaigns/test", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  sendSingleEmail: (body: { toEmail: string; subject: string; htmlContent: string }) =>
+    request<{ success: boolean; message: string }>("/email/send-single", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };
+

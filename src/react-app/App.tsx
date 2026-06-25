@@ -13,6 +13,7 @@ import Reports from "./pages/Reports";
 import Groups from "./pages/Groups";
 import Pipeline from "./pages/Pipeline";
 import LmsClients from "./pages/LmsClients";
+import EmailCampaigns from "./pages/EmailCampaigns";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -102,6 +103,10 @@ export default function App() {
             <Route
               path="/lms"
               element={<ProtectedRoute><Layout><LmsClients /></Layout></ProtectedRoute>}
+            />
+            <Route
+              path="/email"
+              element={<ProtectedRoute><Layout><EmailCampaigns /></Layout></ProtectedRoute>}
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

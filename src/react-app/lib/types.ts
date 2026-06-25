@@ -1,4 +1,4 @@
-export type User = {
+﻿export type User = {
   id: number;
   email: string;
   name: string;
@@ -74,7 +74,7 @@ export type LmsClient = {
   name: string;
   phone: string | null;
   email: string | null;
-  domain: string;            // required — dùng làm KV key
+  domain: string;            // required â€” dÃ¹ng lÃ m KV key
   contract_start: string;
   contract_end: string;
   user_count: number;
@@ -155,3 +155,36 @@ export type Reports = {
   monthlyTrend: { month: string; leads: number; won: number; revenue: number }[];
   staffActivity: { staff: string; total_activities: number; calls: number; meetings: number; emails: number; leads_worked: number }[];
 };
+
+export type BackgroundJob = {
+  id: number;
+  type: string;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'STALLED' | 'DRAFT' | 'SCHEDULED';
+  payload: string;
+  progress: number;
+  total: number;
+  error_message: string | null;
+  locked_until: string | null;
+  scheduled_at: string | null;
+  created_by: number;
+  creator_name?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CampaignDetails = {
+  job: BackgroundJob;
+  stats: {
+    total: number;
+    completed: number;
+    failed: number;
+    pending: number;
+  };
+  failures: {
+    to_email: string;
+    error_message: string;
+    retry_count: number;
+  }[];
+};
+
+

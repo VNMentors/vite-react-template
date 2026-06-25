@@ -3,6 +3,10 @@ export type Bindings = {
   JWT_SECRET: string;
   API_KEY: string;
   LMS_KV: KVNamespace; // KV namespace dùng cho LMS SaaS tenant routing
+  EMAIL_API_URL: string;
+  EMAIL_FROM: string;
+  EMAIL_BATCH_SIZE: string;
+  EMAIL_MAX_RETRY: string;
 };
 
 export type Variables = {
